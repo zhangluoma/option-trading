@@ -194,14 +194,16 @@ def save_crypto_snapshots(crypto_reddit, crypto_prices, fear_greed, snapshot_tim
         # Use price change as additional sentiment signal
         price_change = price_data.get('price_change_24h', 0)
         price_sent = 0.5
-        if price_change > 5:
-            price_sent = 0.7
-        elif price_change > 10:
-            price_sent = 0.85
-        elif price_change < -5:
-            price_sent = 0.3
-        elif price_change < -10:
-            price_sent = 0.15
+        if price_change and price_change > 5:
+            if price_change > 10:
+                price_sent = 0.85
+            else:
+                price_sent = 0.7
+        elif price_change and price_change < -5:
+            if price_change < -10:
+                price_sent = 0.15
+            else:
+                price_sent = 0.3
         
         # Fear & Greed Index as market-wide sentiment
         fg_sent = 0.5
