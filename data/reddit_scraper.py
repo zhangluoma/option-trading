@@ -90,7 +90,7 @@ def scrape_subreddit_html(subreddit, limit=200):
     """
     Scrape a subreddit's hot posts from old.reddit.com
     
-    Returns: List of post dicts
+    Returns: List of post dicts with title, score, url, content
     """
     
     url = f"https://old.reddit.com/r/{subreddit}/"
@@ -109,41 +109,55 @@ def scrape_subreddit_html(subreddit, limit=200):
         print(f"     ❌ Error fetching r/{subreddit}: {e}")
         return []
     
-    # Parse HTML with regex (simple but works)
-    # Looking for posts in format: <div class="thing" ... data-title="..." data-score="..." ...>
-    
     posts = []
     
-    # Extract post data using regex
-    # Pattern for titles
+    # Pattern to extract post data from thing divs
+    # Extract: data-url, data-permalink, title, score
+    thing_pattern = r'<div[^>]*class="[^"]*thing[^"]*"[^>]*data-url="([^"]*)"[^>]*data-permalink="([^"]*)"[^>]*>'
+    thing_matches = re.findall(thing_pattern, html)
+    
+    # Extract titles
     title_pattern = r'<a[^>]*class="[^"]*title[^"]*"[^>]*>([^<]+)</a>'
     titles = re.findall(title_pattern, html)
     
-    # Pattern for scores (upvotes)
+    # Extract scores
     score_pattern = r'<div[^>]*class="[^"]*score unvoted[^"]*"[^>]*title="([0-9]+)"'
     scores = re.findall(score_pattern, html)
     
-    # Pattern for comment counts
+    # Extract comment counts
     comment_pattern = r'<a[^>]*class="[^"]*comments[^"]*"[^>]*>([0-9,]+)\s*comment'
     comments = re.findall(comment_pattern, html)
     
+    # Extract authors (for deduplication)
+    author_pattern = r'<a[^>]*class="[^"]*author[^"]*"[^>]*>([^<]+)</a>'
+    authors = re.findall(author_pattern, html)
+    
     # Combine (take min length to avoid misalignment)
-    min_len = min(len(titles), len(scores), len(comments), limit)
+    min_len = min(len(titles), len(scores), len(comments), len(thing_matches), limit)
     
     for i in range(min_len):
         try:
             title = titles[i].strip()
             score = int(scores[i])
             num_comments = int(comments[i].replace(',', ''))
+            data_url = thing_matches[i][0]
+            permalink = thing_matches[i][1]
+            author = authors[i] if i < len(authors) else 'unknown'
+            
+            # Build full reddit URL
+            post_url = f"https://old.reddit.com{permalink}"
             
             posts.append({
                 'title': title,
                 'score': score,
                 'num_comments': num_comments,
-                'subreddit': subreddit
+                'subreddit': subreddit,
+                'url': post_url,
+                'data_url': data_url,  # External link (if any)
+                'author': author
             })
             
-        except (ValueError, IndexError):
+        except (ValueError, IndexError) as e:
             continue
     
     print(f"     ✅ Found {len(posts)} posts")
@@ -202,12 +216,15 @@ def scrape_reddit_sentiment(subreddits, lookback_hours=24, min_upvotes=50, asset
             ticker_data[ticker]['sentiment_count'] += 1
             ticker_data[ticker]['total_score'] += post['score']
             
-            # Keep top posts
+            # Keep top posts with full data
             if len(ticker_data[ticker]['top_posts']) < 3:
                 ticker_data[ticker]['top_posts'].append({
                     'title': title,
                     'score': post['score'],
-                    'subreddit': post['subreddit']
+                    'subreddit': post['subreddit'],
+                    'url': post.get('url', ''),
+                    'data_url': post.get('data_url', ''),
+                    'author': post.get('author', '')
                 })
     
     # Calculate final scores

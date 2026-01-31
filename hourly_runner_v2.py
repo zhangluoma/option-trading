@@ -27,14 +27,14 @@ def process_reddit_data(reddit_data, asset_type='stock'):
         
         for post in item.get('top_posts', []):
             post_data = {
-                'post_id': f"reddit_{post.get('subreddit', 'unknown')}_{post['score']}_{ticker}_{int(datetime.now().timestamp())}",
+                'post_id': f"reddit_{post.get('subreddit', 'unknown')}_{post.get('author', 'unknown')}_{ticker}_{int(datetime.now().timestamp())}",
                 'source': 'reddit',
                 'asset_type': asset_type,
                 'ticker': ticker,
                 'title': post.get('title', ''),
-                'content': '',
-                'url': '',
-                'author': '',
+                'content': post.get('data_url', ''),  # External link if any
+                'url': post.get('url', ''),  # Reddit post URL
+                'author': post.get('author', ''),
                 'score': post.get('score', 0),
                 'created_at': datetime.now(),
                 'sentiment_score': item['sentiment']
