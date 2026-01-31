@@ -15,27 +15,48 @@ from .ticker_validator import validate_tickers
 
 def extract_tickers(text):
     """Extract stock tickers from text (e.g., $AAPL, TSLA)"""
-    # Match $TICKER or standalone uppercase 1-5 letter words
+    # Match $TICKER (high confidence) or standalone uppercase 1-5 letter words
     pattern = r'\$([A-Z]{1,5})\b|(?<!\w)([A-Z]{1,5})(?=\s|$|[^A-Z])'
     matches = re.findall(pattern, text.upper())
-    tickers = [m[0] or m[1] for m in matches]
     
-    # Filter out common non-ticker words
-    exclude = {
+    # Separate $ prefixed (high confidence) from others
+    high_confidence = []
+    ambiguous = []
+    
+    for match in matches:
+        ticker = match[0] or match[1]
+        if match[0]:  # Has $ prefix
+            high_confidence.append(ticker)
+        else:
+            ambiguous.append(ticker)
+    
+    # Ambiguous words that are ONLY valid if prefixed with $
+    AMBIGUOUS_WORDS = {
+        'AS', 'PLAY', 'HERE', 'TERM', 'HELP', 'HIGH', 'NEXT', 'REAL', 
+        'LOVE', 'SHOP', 'TRUE', 'COOL', 'BEST', 'SAFE', 'CAKE', 'RIDE'
+    }
+    
+    # Filter ambiguous: only keep if in high confidence OR if length >= 3 and not in ambiguous list
+    tickers = high_confidence + [t for t in ambiguous if t not in AMBIGUOUS_WORDS or len(t) >= 4]
+    
+    # Also exclude absolute non-tickers
+    absolute_exclude = {
         'YOLO', 'DD', 'WSB', 'CEO', 'IPO', 'ATH', 'IMO', 'TLDR', 'FYI', 'USA', 
         'ATM', 'OTM', 'ITM', 'EPS', 'ETF', 'GDP', 'SEC', 'IRS', 'LLC', 'INC',
         'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER',
         'WAS', 'ONE', 'OUR', 'OUT', 'NEW', 'NOW', 'GET', 'HAS', 'HIS', 'HOW',
-        'AS', 'MORE', 'HERE', 'PLAY', 'VS', 'AI', 'TERM', 'TIME', 'HELP', 'WHAT',
-        'WHEN', 'WHERE', 'WHO', 'WHY', 'WHICH', 'ABOUT', 'INTO', 'THAN', 'FROM',
-        'THEM', 'BEEN', 'HAVE', 'WITH', 'THIS', 'THAT', 'WILL', 'WOULD', 'THERE',
-        'THEIR', 'SOME', 'COULD', 'MAKE', 'LIKE', 'HIM', 'ANY', 'THESE', 'SO',
-        'OVER', 'ONLY', 'VERY', 'EVEN', 'BACK', 'AFTER', 'USE', 'TWO', 'MOST',
-        'WAY', 'WORK', 'FIRST', 'WELL', 'DOWN', 'SIDE', 'DOES', 'EACH', 'SUCH',
-        'LONG', 'OWN', 'MUCH', 'BEFORE', 'RIGHT', 'MEAN', 'SAME', 'TELL',
-        'MAX', 'MIN', 'AVG', 'SUM', 'DIV', 'MUL', 'ADD', 'SUB'
+        'MORE', 'VS', 'AI', 'TIME', 'WHAT', 'WHEN', 'WHERE', 'WHO', 'WHY', 
+        'WHICH', 'ABOUT', 'INTO', 'THAN', 'FROM', 'THEM', 'BEEN', 'HAVE', 
+        'WITH', 'THIS', 'THAT', 'WILL', 'WOULD', 'THERE', 'THEIR', 'SOME', 
+        'COULD', 'MAKE', 'LIKE', 'HIM', 'ANY', 'THESE', 'SO', 'OVER', 'ONLY', 
+        'VERY', 'EVEN', 'BACK', 'AFTER', 'USE', 'TWO', 'MOST', 'WAY', 'WORK', 
+        'FIRST', 'WELL', 'DOWN', 'SIDE', 'DOES', 'EACH', 'SUCH', 'LONG', 'OWN', 
+        'MUCH', 'BEFORE', 'RIGHT', 'MEAN', 'SAME', 'TELL', 'MAX', 'MIN', 'AVG', 
+        'SUM', 'DIV', 'MUL', 'ADD', 'SUB'
     }
-    return [t for t in tickers if t not in exclude and len(t) > 1]
+    
+    tickers = [t for t in tickers if t not in absolute_exclude and len(t) > 1]
+    return tickers
 
 
 def analyze_sentiment(text):
