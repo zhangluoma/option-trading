@@ -14,7 +14,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
+def combine_sentiment_signals(reddit_data, yahoo_data, unusual_data, trends_data=None):
     """
     Combine signals from multiple sources
     
@@ -37,9 +37,10 @@ def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
     
     config = load_config()
     weights = {
-        'reddit': config['sources']['reddit']['weight'],
-        'twitter': config['sources']['twitter']['weight'],
-        'unusual_options': config['sources']['unusual_options']['weight']
+        'reddit': 0.35,
+        'yahoo': 0.15,
+        'unusual_options': 0.35,
+        'trends': 0.15
     }
     
     # Aggregate by ticker
@@ -49,27 +50,41 @@ def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
     for item in reddit_data:
         ticker = item['ticker']
         if ticker not in ticker_signals:
-            ticker_signals[ticker] = {'reddit': 0, 'twitter': 0, 'unusual': 0, 'reasons': []}
+            ticker_signals[ticker] = {'reddit': 0, 'yahoo': 0, 'unusual': 0, 'trends': 0, 'reasons': []}
         
         ticker_signals[ticker]['reddit'] = item['sentiment']
         if item['mentions'] > 20:
             ticker_signals[ticker]['reasons'].append(f"Reddit: {item['mentions']} mentions")
     
-    # Process Twitter data
-    for item in twitter_data:
+    # Process Yahoo Finance data
+    for item in yahoo_data:
         ticker = item['ticker']
         if ticker not in ticker_signals:
-            ticker_signals[ticker] = {'reddit': 0, 'twitter': 0, 'unusual': 0, 'reasons': []}
+            ticker_signals[ticker] = {'reddit': 0, 'yahoo': 0, 'unusual': 0, 'trends': 0, 'reasons': []}
         
-        ticker_signals[ticker]['twitter'] = item['sentiment']
-        if item.get('mentions', 0) > 10:
-            ticker_signals[ticker]['reasons'].append(f"Twitter: trending")
+        ticker_signals[ticker]['yahoo'] = item['sentiment']
+        if item['headlines'] > 5:
+            ticker_signals[ticker]['reasons'].append(f"Yahoo: {item['headlines']} headlines")
+    
+    # Process Google Trends data
+    if trends_data:
+        for ticker, item in trends_data.items():
+            if ticker not in ticker_signals:
+                ticker_signals[ticker] = {'reddit': 0, 'yahoo': 0, 'unusual': 0, 'trends': 0, 'reasons': []}
+            
+            # Convert trend interest to sentiment score (0-1)
+            # Higher interest = more bullish (simplified)
+            trend_score = min(item['current_interest'] / 50, 1.0)
+            ticker_signals[ticker]['trends'] = trend_score
+            
+            if item['trend'] == 'rising':
+                ticker_signals[ticker]['reasons'].append(f"Trends: {item['trend']}, interest {item['current_interest']}")
     
     # Process Unusual Options
     for item in unusual_data:
         ticker = item['ticker']
         if ticker not in ticker_signals:
-            ticker_signals[ticker] = {'reddit': 0, 'twitter': 0, 'unusual': 0, 'reasons': []}
+            ticker_signals[ticker] = {'reddit': 0, 'yahoo': 0, 'unusual': 0, 'trends': 0, 'reasons': []}
         
         ticker_signals[ticker]['unusual'] = item['signal_strength']
         if item['total_premium_flow'] > 500000:
@@ -84,8 +99,9 @@ def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
     for ticker, signals in ticker_signals.items():
         weighted_score = (
             signals['reddit'] * weights['reddit'] +
-            signals['twitter'] * weights['twitter'] +
-            signals['unusual'] * weights['unusual_options']
+            signals['yahoo'] * weights['yahoo'] +
+            signals['unusual'] * weights['unusual_options'] +
+            signals['trends'] * weights['trends']
         )
         
         # Determine direction
@@ -104,8 +120,9 @@ def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
         else:
             confidence = 'low'
         
-        # Only include if above minimum threshold
-        if weighted_score >= min_score or weighted_score <= (1 - min_score):
+        # Only include if above minimum threshold (lowered for more results)
+        min_score_adjusted = 0.55  # Lowered from 0.6
+        if weighted_score >= min_score_adjusted or weighted_score <= (1 - min_score_adjusted):
             results.append({
                 'ticker': ticker,
                 'overall_score': round(weighted_score, 2),
@@ -113,8 +130,9 @@ def combine_sentiment_signals(reddit_data, twitter_data, unusual_data):
                 'confidence': confidence,
                 'breakdown': {
                     'reddit': round(signals['reddit'], 2),
-                    'twitter': round(signals['twitter'], 2),
-                    'unusual': round(signals['unusual'], 2)
+                    'yahoo': round(signals['yahoo'], 2),
+                    'unusual': round(signals['unusual'], 2),
+                    'trends': round(signals['trends'], 2)
                 },
                 'reasons': signals['reasons']
             })

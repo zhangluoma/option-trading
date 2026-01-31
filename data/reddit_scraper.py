@@ -25,7 +25,15 @@ def extract_tickers(text):
         'YOLO', 'DD', 'WSB', 'CEO', 'IPO', 'ATH', 'IMO', 'TLDR', 'FYI', 'USA', 
         'ATM', 'OTM', 'ITM', 'EPS', 'ETF', 'GDP', 'SEC', 'IRS', 'LLC', 'INC',
         'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER',
-        'WAS', 'ONE', 'OUR', 'OUT', 'NEW', 'NOW', 'GET', 'HAS', 'HIS', 'HOW'
+        'WAS', 'ONE', 'OUR', 'OUT', 'NEW', 'NOW', 'GET', 'HAS', 'HIS', 'HOW',
+        'AS', 'MORE', 'HERE', 'PLAY', 'VS', 'AI', 'TERM', 'TIME', 'HELP', 'WHAT',
+        'WHEN', 'WHERE', 'WHO', 'WHY', 'WHICH', 'ABOUT', 'INTO', 'THAN', 'FROM',
+        'THEM', 'BEEN', 'HAVE', 'WITH', 'THIS', 'THAT', 'WILL', 'WOULD', 'THERE',
+        'THEIR', 'SOME', 'COULD', 'MAKE', 'LIKE', 'HIM', 'ANY', 'THESE', 'SO',
+        'OVER', 'ONLY', 'VERY', 'EVEN', 'BACK', 'AFTER', 'USE', 'TWO', 'MOST',
+        'WAY', 'WORK', 'FIRST', 'WELL', 'DOWN', 'SIDE', 'DOES', 'EACH', 'SUCH',
+        'LONG', 'OWN', 'MUCH', 'BEFORE', 'RIGHT', 'MEAN', 'SAME', 'TELL',
+        'MAX', 'MIN', 'AVG', 'SUM', 'DIV', 'MUL', 'ADD', 'SUB'
     }
     return [t for t in tickers if t not in exclude and len(t) > 1]
 
@@ -57,7 +65,7 @@ def analyze_sentiment(text):
     return bull_score / total
 
 
-def scrape_subreddit_html(subreddit, limit=100):
+def scrape_subreddit_html(subreddit, limit=200):
     """
     Scrape a subreddit's hot posts from old.reddit.com
     
@@ -121,7 +129,7 @@ def scrape_subreddit_html(subreddit, limit=100):
     return posts
 
 
-def scrape_reddit_sentiment(subreddits, lookback_hours=24, min_upvotes=50):
+def scrape_reddit_sentiment(subreddits, lookback_hours=24, min_upvotes=50, asset_type='stock'):
     """
     Scrape Reddit for trending tickers with sentiment
     
@@ -195,6 +203,7 @@ def scrape_reddit_sentiment(subreddits, lookback_hours=24, min_upvotes=50):
         
         results.append({
             'ticker': ticker,
+            'asset_type': asset_type,
             'mentions': data['mentions'],
             'sentiment': round(avg_sentiment, 2),
             'buzz_score': round(buzz_score, 1),

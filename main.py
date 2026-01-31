@@ -11,6 +11,8 @@ from datetime import datetime
 from data.reddit_scraper import scrape_reddit_sentiment
 from data.unusual_options import scan_tickers_for_unusual
 from data.market_data import find_best_option
+from data.google_trends import get_search_trends
+from data.yahoo_finance_scraper import scan_tickers_yahoo
 from research.sentiment_score import combine_sentiment_signals
 from research.risk_calc import apply_aggressive_filters, load_account_config
 
@@ -53,13 +55,20 @@ def run_research():
     )
     print(f"   → Found {len(unusual_data)} tickers with significant flow")
     
-    print(f"\n[3/5] Scanning Twitter sentiment...")
-    # TODO: Implement Twitter scraper
-    twitter_data = []
-    print(f"   → Found {len(twitter_data)} tickers")
+    print(f"\n[3/5] Scanning Google Trends & Yahoo Finance...")
+    # Get trends for Reddit tickers
+    reddit_tickers = [r['ticker'] for r in reddit_data]
+    trends_data = get_search_trends(reddit_tickers[:20], timeframe='now 7-d')  # Increased to 20
+    yahoo_data = scan_tickers_yahoo(reddit_tickers[:20])  # Increased to 20
+    print(f"   → Trends: {len(trends_data)}, Yahoo: {len(yahoo_data)}")
     
     print(f"\n[4/5] Combining sentiment signals...")
-    combined_signals = combine_sentiment_signals(reddit_data, twitter_data, unusual_data)
+    combined_signals = combine_sentiment_signals(
+        reddit_data, 
+        yahoo_data, 
+        unusual_data,
+        trends_data
+    )
     print(f"   → {len(combined_signals)} high-conviction signals")
     
     print(f"\n[5/5] Applying risk filters & position sizing...")

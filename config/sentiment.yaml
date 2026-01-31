@@ -3,11 +3,21 @@ sources:
   reddit:
     enabled: true
     weight: 0.40  # Highest weight
-    subreddits:
+    stock_subreddits:
       - wallstreetbets
       - options
       - stocks
-    min_upvotes: 50
+      - investing
+      - stockmarket
+      - pennystocks
+    crypto_subreddits:
+      - cryptocurrency
+      - bitcoin
+      - ethereum
+      - cryptomarkets
+      - satoshistreetbets
+      - cryptomoonshots
+    min_upvotes: 20  # Lowered threshold
     lookback_hours: 24
   
   twitter:
