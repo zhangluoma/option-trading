@@ -158,6 +158,92 @@
             color: #718096;
             font-size: 18px;
         }
+        
+        .post-card {
+            background: #1a1f3a;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border-left: 4px solid #4299e1;
+        }
+        
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .post-ticker {
+            font-weight: 600;
+            color: #4299e1;
+            font-size: 18px;
+        }
+        
+        .post-score {
+            color: #48bb78;
+            font-weight: 500;
+        }
+        
+        .post-title {
+            font-size: 16px;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .post-content {
+            color: #a0aec0;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: #0a0e27;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .post-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #718096;
+        }
+        
+        .post-link {
+            color: #4299e1;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .post-link:hover {
+            color: #63b3ed;
+            text-decoration: underline;
+        }
+        
+        .sentiment-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .sentiment-bullish {
+            background: rgba(72, 187, 120, 0.2);
+            color: #48bb78;
+        }
+        
+        .sentiment-bearish {
+            background: rgba(245, 101, 101, 0.2);
+            color: #f56565;
+        }
+        
+        .sentiment-neutral {
+            background: rgba(237, 242, 247, 0.2);
+            color: #edf2f7;
+        }
     </style>
 </head>
 <body>
@@ -197,6 +283,11 @@
         
         <div class="chart-container">
             <canvas id="sentimentChart"></canvas>
+        </div>
+        
+        <div id="postsSection" style="display: none;">
+            <h2 style="margin-bottom: 20px; font-size: 24px;">📝 Related Posts</h2>
+            <div id="postsList"></div>
         </div>
         
         <div class="loading" id="loading">
@@ -253,6 +344,7 @@
             if (!ticker) {
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('stats').style.display = 'none';
+                document.getElementById('postsSection').style.display = 'none';
                 if (chart) chart.destroy();
                 return;
             }
@@ -260,6 +352,7 @@
             document.getElementById('loading').innerHTML = 'Loading data...';
             document.getElementById('loading').style.display = 'block';
             document.getElementById('stats').style.display = 'none';
+            document.getElementById('postsSection').style.display = 'none';
             
             try {
                 const response = await fetch(`/api/sentiment/${ticker}`);
@@ -303,9 +396,68 @@
                 // Draw chart
                 drawChart(ticker, data);
                 
+                // Load posts
+                loadPosts(ticker);
+                
             } catch (error) {
                 console.error('Error loading sentiment:', error);
                 document.getElementById('loading').innerHTML = 'Error loading data';
+            }
+        }
+        
+        // Load posts for a ticker
+        async function loadPosts(ticker) {
+            try {
+                const response = await fetch(`/api/posts/${ticker}`);
+                const posts = await response.json();
+                
+                if (posts.length === 0) {
+                    return;
+                }
+                
+                document.getElementById('postsSection').style.display = 'block';
+                
+                const postsList = document.getElementById('postsList');
+                postsList.innerHTML = '';
+                
+                posts.forEach(post => {
+                    const sentiment = post.sentiment_score || 0.5;
+                    const sentimentClass = sentiment > 0.7 ? 'bullish' : sentiment < 0.3 ? 'bearish' : 'neutral';
+                    const sentimentText = sentiment > 0.7 ? '🟢 Bullish' : sentiment < 0.3 ? '🔴 Bearish' : '🟡 Neutral';
+                    
+                    const postCard = document.createElement('div');
+                    postCard.className = 'post-card';
+                    
+                    let contentHtml = '';
+                    if (post.content && post.content.length > 10) {
+                        // Check if it's a URL or actual content
+                        if (post.content.startsWith('http')) {
+                            contentHtml = `<div class="post-meta">🌐 External: <a href="${post.content}" target="_blank" class="post-link">${post.content.substring(0, 60)}...</a></div>`;
+                        } else {
+                            contentHtml = `<div class="post-content">${post.content}</div>`;
+                        }
+                    }
+                    
+                    postCard.innerHTML = `
+                        <div class="post-header">
+                            <div class="post-ticker">${post.ticker}</div>
+                            <div class="post-score">⬆️ ${post.score}</div>
+                        </div>
+                        <div class="post-title">${post.title}</div>
+                        ${contentHtml}
+                        <div class="post-meta">
+                            <span class="sentiment-badge sentiment-${sentimentClass}">${sentimentText}</span>
+                            <span>👤 u/${post.author}</span>
+                            <span>📅 ${new Date(post.created_at).toLocaleDateString()}</span>
+                            ${post.url ? `<a href="${post.url}" target="_blank" class="post-link">🔗 View on Reddit</a>` : ''}
+                        </div>
+                    `;
+                    
+                    postsList.appendChild(postCard);
+                });
+                
+            } catch (error) {
+                console.error('Error loading posts:', error);
             }
         }
         

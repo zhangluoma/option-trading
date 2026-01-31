@@ -86,6 +86,37 @@ def analyze_sentiment(text):
     return bull_score / total
 
 
+def fetch_post_content(post_url):
+    """
+    Fetch full text content from a Reddit post
+    Returns: post body text or empty string
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+    }
+    
+    try:
+        response = requests.get(post_url, headers=headers, timeout=10)
+        response.raise_for_status()
+        html = response.text
+        
+        # Extract post body using regex
+        # Look for the selftext div
+        content_pattern = r'<div class="[^"]*usertext-body[^"]*"[^>]*><div class="md">(.+?)</div></div>'
+        matches = re.findall(content_pattern, html, re.DOTALL)
+        
+        if matches:
+            # Clean HTML tags from content
+            content = re.sub(r'<[^>]+>', '', matches[0])
+            content = content.strip()[:1000]  # Limit to 1000 chars
+            return content
+        
+        return ''
+        
+    except Exception as e:
+        return ''
+
+
 def scrape_subreddit_html(subreddit, limit=200):
     """
     Scrape a subreddit's hot posts from old.reddit.com
@@ -238,6 +269,19 @@ def scrape_reddit_sentiment(subreddits, lookback_hours=24, min_upvotes=50, asset
         
         # Buzz score: mentions * avg_upvotes
         buzz_score = data['mentions'] * (data['total_score'] / data['mentions']) / 100
+        
+        # Fetch full content for extreme sentiment posts
+        for post in data['top_posts']:
+            post_sentiment = analyze_sentiment(post['title'])
+            
+            # Extreme sentiment: < 0.3 (very bearish) or > 0.7 (very bullish)
+            if post_sentiment < 0.3 or post_sentiment > 0.7:
+                if post.get('url'):
+                    print(f"      🔍 Fetching full content for extreme sentiment post ({post_sentiment:.2f})")
+                    full_content = fetch_post_content(post['url'])
+                    if full_content:
+                        post['full_content'] = full_content
+                    time.sleep(0.5)  # Rate limiting
         
         results.append({
             'ticker': ticker,

@@ -287,6 +287,31 @@ def get_all_tickers():
     return [dict(row) for row in rows]
 
 
+def get_ticker_posts(ticker, limit=20):
+    """
+    Get posts for a specific ticker
+    
+    Returns: List of post dicts with title, content, url, score, etc.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT 
+            post_id, source, ticker, title, content, url, author, 
+            score, created_at, sentiment_score, asset_type
+        FROM posts
+        WHERE ticker = ?
+        ORDER BY score DESC, created_at DESC
+        LIMIT ?
+    """, (ticker, limit))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    return [dict(row) for row in rows]
+
+
 if __name__ == "__main__":
     # Initialize database
     init_database()

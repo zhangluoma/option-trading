@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from flask import Flask, render_template, jsonify, request
-from database.db_manager import get_ticker_history, get_all_tickers, get_tickers_by_type
+from database.db_manager import get_ticker_history, get_all_tickers, get_tickers_by_type, get_ticker_posts
 
 app = Flask(__name__)
 
@@ -37,6 +37,14 @@ def api_sentiment(ticker):
     hours = 168  # 7 days
     history = get_ticker_history(ticker, hours)
     return jsonify(history)
+
+
+@app.route('/api/posts/<ticker>')
+def api_posts(ticker):
+    """Get posts for a ticker"""
+    limit = int(request.args.get('limit', 20))
+    posts = get_ticker_posts(ticker, limit)
+    return jsonify(posts)
 
 
 if __name__ == '__main__':
