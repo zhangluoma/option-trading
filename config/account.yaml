@@ -1,0 +1,19 @@
+capital: 7000
+mode: aggressive
+
+# Risk per trade (higher for aggressive)
+max_risk_per_trade: 500
+max_open_trades: 4
+
+# Options preference (aggressive)
+preferred_structures:
+  - long_call
+  - long_put
+  - bull_call_spread
+  - bear_put_spread
+
+# DTE range (shorter for aggressive)
+dte_range: [7, 30]
+
+# Position sizing (aggressive allows larger %)
+max_position_pct: 0.15  # 15% per trade

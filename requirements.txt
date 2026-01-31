@@ -1,0 +1,8 @@
+pyyaml
+requests
+beautifulsoup4
+# Optional for future enhancements
+# tweepy  # Twitter API
+# yfinance  # Market data
+# pandas
+# numpy

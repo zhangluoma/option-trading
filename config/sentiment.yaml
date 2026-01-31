@@ -1,0 +1,30 @@
+# Sentiment sources and weights
+sources:
+  reddit:
+    enabled: true
+    weight: 0.40  # Highest weight
+    subreddits:
+      - wallstreetbets
+      - options
+      - stocks
+    min_upvotes: 50
+    lookback_hours: 24
+  
+  twitter:
+    enabled: true
+    weight: 0.25
+    lookback_hours: 12
+  
+  unusual_options:
+    enabled: true
+    weight: 0.35  # Very important
+    min_premium: 100000  # $100k+ trades
+    min_oi_change_pct: 50  # 50%+ OI increase
+
+# Sentiment thresholds
+sentiment_min_score: 0.6  # 0-1 scale
+buzz_min_mentions: 10
+
+# Filters
+exclude_earnings_days: 2  # Skip if earnings within 2 days
+min_liquidity_oi: 100  # Minimum open interest
