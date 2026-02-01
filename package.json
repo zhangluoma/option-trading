@@ -1,0 +1,16 @@
+{
+  "name": "options-sentiment-engine",
+  "version": "1.0.0",
+  "description": "**Sentiment-driven options research system**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@dydxprotocol/v4-client-js": "^3.4.0"
+  }
+}

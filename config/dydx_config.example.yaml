@@ -1,0 +1,60 @@
+# dYdX v4 交易配置模板
+# 复制此文件为 dydx_config.yaml 并填入你的信息
+
+dydx:
+  # ==================== 网络配置 ====================
+  # mainnet: 真实交易（需要真金白银）
+  # testnet: 测试网（免费测试）
+  network: testnet
+  
+  # ==================== 钱包配置 ====================
+  # ⚠️ 敏感信息：不要提交到 git！
+  # 生成助记词：python -c "from v4_client_py.chain.aerial.wallet import LocalWallet; w = LocalWallet.generate_mnemonic(); print(f'Mnemonic: {w.mnemonic()}\nAddress: {w.address()}')"
+  mnemonic: "your twelve or twenty four word mnemonic phrase goes here"
+  
+  # 子账户编号（每个地址可以有 128 个子账户，默认用 0）
+  subaccount_number: 0
+  
+  # ==================== 交易配置 ====================
+  # 默认杠杆倍数（1-20x）
+  default_leverage: 2.0
+  
+  # 最大杠杆倍数
+  max_leverage: 5.0
+  
+  # ==================== API 端点（可选）====================
+  # 如果你有自己的节点，可以在这里指定
+  # 否则使用默认的公共节点
+  
+  # validator_url: "https://dydx-ops-rpc.kingnodes.com"
+  # indexer_url: "https://indexer.dydx.trade/v4"
+  # websocket_url: "wss://indexer.dydx.trade/v4/ws"
+  
+  # ==================== 风控配置 ====================
+  # 最大单笔订单金额（USD）
+  max_order_size: 5000.0
+  
+  # 最大持仓价值（USD）
+  max_total_position: 20000.0
+  
+  # 最大单日亏损（USD）
+  max_daily_loss: 1000.0
+  
+  # ==================== 策略配置 ====================
+  # 启用的市场
+  enabled_markets:
+    - BTC
+    - ETH
+    - SOL
+    # - DOGE
+    # - AVAX
+    # - MATIC
+  
+  # 止损止盈配置
+  default_stop_loss_pct: 2.0   # 2% 止损
+  default_take_profit_pct: 5.0  # 5% 止盈
+  
+  # ==================== 日志配置 ====================
+  log_level: INFO  # DEBUG | INFO | WARNING | ERROR
+  log_trades: true
+  log_file: "logs/dydx_trades.log"

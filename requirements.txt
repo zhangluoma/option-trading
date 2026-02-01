@@ -1,8 +1,17 @@
+# Core dependencies
 pyyaml
 requests
 beautifulsoup4
+python-dotenv
+
+# dYdX v4 trading
+v4-client-py
+aiohttp
+
+# Data analysis (optional)
+# pandas
+# numpy
+
 # Optional for future enhancements
 # tweepy  # Twitter API
 # yfinance  # Market data
-# pandas
-# numpy
