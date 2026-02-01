@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from signals.base import SignalType, AggregatedSignal
 from signals.aggregator import SignalAggregator
 from trading.base_trader import BaseTrader, Order, OrderSide, OrderType, OrderResult
+from trading.strategy import StrategyManager, TradingStrategy
 from risk.risk_manager import RiskManager, RiskCheck
 
 logger = logging.getLogger(__name__)
@@ -41,17 +42,12 @@ class TradingEngine:
         self.risk_manager = None  # 需要外部注入
         self.traders = {}  # platform_name -> BaseTrader
         
-        # 策略配置
-        self.strategy = config.get('strategy', {})
-        self.min_confidence = self.strategy.get('min_confidence', 0.75)
-        self.min_strength = self.strategy.get('min_strength', 0.60)
-        
-        # 仓位计算
-        self.base_position_size = self.strategy.get('base_position_size', 1000)
-        self.sizing_method = self.strategy.get('sizing_method', 'fixed')
+        # 策略管理器
+        self.strategy_manager = StrategyManager()
+        self.active_strategy_name = config.get('active_strategy', 'sentiment_short')
         
         # 平台选择规则
-        self.platform_rules = self.strategy.get('platform_rules', {
+        self.platform_rules = config.get('platform_rules', {
             'crypto': 'dydx',
             'stock': 'ibkr',
             'option': 'ibkr'
@@ -60,6 +56,7 @@ class TradingEngine:
         # 运行状态
         self.is_running = False
         self.last_check_time = None
+        self.trade_history = []  # 交易历史（用于频率控制）
     
     def set_signal_aggregator(self, aggregator: SignalAggregator):
         """注入信号聚合器"""
@@ -125,17 +122,32 @@ class TradingEngine:
             # 1. 获取融合信号
             signal = self.signal_aggregator.aggregate(
                 ticker=ticker,
-                timeframe=self.strategy.get('timeframe', '1h')
+                timeframe='1h'
             )
             
             logger.info(f"{ticker}: {signal}")
             
-            # 2. 检查信号是否满足策略要求
-            if not self._meets_strategy_criteria(signal):
-                logger.debug(f"{ticker}: Signal does not meet strategy criteria")
+            # 2. 根据信号来源选择策略
+            signal_sources = [s.source for s in signal.contributing_signals]
+            strategy = self.strategy_manager.select_strategy(signal_sources, asset_type)
+            
+            if not strategy:
+                logger.info(f"{ticker}: No matching strategy for {signal_sources} + {asset_type}")
                 return
             
-            # 3. 检查是否已有持仓
+            logger.info(f"{ticker}: Using strategy '{strategy.name}'")
+            
+            # 3. 检查信号是否满足策略要求
+            if not self._meets_strategy_criteria(signal, strategy):
+                logger.debug(f"{ticker}: Signal does not meet {strategy.name} criteria")
+                return
+            
+            # 4. 检查交易频率限制
+            if not self._check_trade_frequency(ticker, strategy):
+                logger.info(f"{ticker}: Trade frequency limit reached")
+                return
+            
+            # 5. 检查是否已有持仓
             platform = self._select_platform(asset_type)
             trader = self.traders.get(platform)
             
@@ -148,10 +160,10 @@ class TradingEngine:
                 logger.info(f"{ticker}: Already have position, skipping")
                 return
             
-            # 4. 计算仓位大小
-            proposed_size = self._calculate_position_size(signal)
+            # 6. 计算仓位大小
+            proposed_size = self._calculate_position_size(signal, strategy)
             
-            # 5. 风险检查
+            # 7. 风险检查
             risk_check = await self.risk_manager.check_trade(
                 ticker=ticker,
                 signal=signal,
@@ -162,10 +174,11 @@ class TradingEngine:
                 logger.warning(f"{ticker}: Risk check failed - {risk_check.reason}")
                 return
             
-            # 6. 执行交易
+            # 8. 执行交易
             await self._execute_trade(
                 ticker=ticker,
                 signal=signal,
+                strategy=strategy,
                 risk_check=risk_check,
                 trader=trader
             )
@@ -173,17 +186,17 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"Error processing {ticker}: {e}", exc_info=True)
     
-    def _meets_strategy_criteria(self, signal: AggregatedSignal) -> bool:
+    def _meets_strategy_criteria(self, signal: AggregatedSignal, strategy: TradingStrategy) -> bool:
         """检查信号是否符合策略条件"""
         
         # 最低置信度
-        if signal.confidence < self.min_confidence:
-            logger.debug(f"Confidence {signal.confidence:.2f} < {self.min_confidence}")
+        if signal.confidence < strategy.min_confidence:
+            logger.debug(f"Confidence {signal.confidence:.2f} < {strategy.min_confidence}")
             return False
         
         # 最低强度
-        if signal.strength < self.min_strength:
-            logger.debug(f"Strength {signal.strength:.2f} < {self.min_strength}")
+        if signal.strength < strategy.min_strength:
+            logger.debug(f"Strength {signal.strength:.2f} < {strategy.min_strength}")
             return False
         
         # 必须有明确方向
@@ -193,7 +206,40 @@ class TradingEngine:
         
         return True
     
-    def _calculate_position_size(self, signal: AggregatedSignal) -> float:
+    def _check_trade_frequency(self, ticker: str, strategy: TradingStrategy) -> bool:
+        """
+        检查交易频率限制
+        
+        Returns:
+            True if trade is allowed
+        """
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
+        
+        # 检查今日交易次数
+        today_trades = [t for t in self.trade_history 
+                       if t['timestamp'].date() == now.date()]
+        
+        if len(today_trades) >= strategy.max_trades_per_day:
+            logger.debug(f"Daily trade limit reached: {len(today_trades)}/{strategy.max_trades_per_day}")
+            return False
+        
+        # 检查该ticker的最近交易时间
+        ticker_trades = [t for t in self.trade_history 
+                        if t['ticker'] == ticker]
+        
+        if ticker_trades:
+            last_trade_time = ticker_trades[-1]['timestamp']
+            hours_since = (now - last_trade_time).total_seconds() / 3600
+            
+            if hours_since < strategy.min_signal_gap_hours:
+                logger.debug(f"Signal gap too short: {hours_since:.1f}h < {strategy.min_signal_gap_hours}h")
+                return False
+        
+        return True
+    
+    def _calculate_position_size(self, signal: AggregatedSignal, strategy: TradingStrategy) -> float:
         """
         根据信号强度和置信度计算仓位大小
         
@@ -203,24 +249,21 @@ class TradingEngine:
         - kelly_conservative: 保守凯利（1/4）
         """
         
-        base_size = self.base_position_size
+        base_size = strategy.base_position_size
         
-        if self.sizing_method == 'fixed':
+        if strategy.sizing_method == 'fixed':
             return base_size
         
-        elif self.sizing_method == 'kelly':
-            # 凯利公式：f = (bp - q) / b
-            # 简化版：f = confidence * strength
+        elif strategy.sizing_method == 'kelly':
             kelly_fraction = signal.confidence * signal.strength
             return base_size * kelly_fraction
         
-        elif self.sizing_method == 'kelly_conservative':
-            # 保守凯利：只用1/4的推荐仓位
+        elif strategy.sizing_method == 'kelly_conservative':
             kelly_fraction = signal.confidence * signal.strength * 0.25
             return base_size * kelly_fraction
         
         else:
-            logger.warning(f"Unknown sizing method: {self.sizing_method}, using fixed")
+            logger.warning(f"Unknown sizing method: {strategy.sizing_method}, using fixed")
             return base_size
     
     def _select_platform(self, asset_type: str) -> str:
@@ -231,6 +274,7 @@ class TradingEngine:
         self,
         ticker: str,
         signal: AggregatedSignal,
+        strategy: TradingStrategy,
         risk_check: RiskCheck,
         trader: BaseTrader
     ):
@@ -240,6 +284,7 @@ class TradingEngine:
         Args:
             ticker: 标的代码
             signal: 融合信号
+            strategy: 使用的策略
             risk_check: 风险检查结果
             trader: 交易器实例
         """
@@ -254,9 +299,11 @@ class TradingEngine:
             take_profit=risk_check.take_profit,
             signal_id=None,  # TODO: 从数据库获取signal_id
             metadata={
+                'strategy': strategy.name,
                 'signal_strength': signal.strength,
                 'signal_confidence': signal.confidence,
-                'final_score': signal.final_score
+                'final_score': signal.final_score,
+                'max_hold_hours': strategy.max_hold_hours
             }
         )
         
@@ -269,11 +316,18 @@ class TradingEngine:
             if result.success:
                 logger.info(f"✅ Order filled: {ticker} {order.side.value} {result.filled_size} @ ${result.filled_price:.2f}")
                 
+                # 记录到交易历史（用于频率控制）
+                self.trade_history.append({
+                    'ticker': ticker,
+                    'strategy': strategy.name,
+                    'timestamp': datetime.now()
+                })
+                
                 # 记录交易到数据库
-                await self._log_trade(signal, order, result)
+                await self._log_trade(signal, strategy, order, result)
                 
                 # 发送通知
-                await self._notify_trade(ticker, signal, order, result)
+                await self._notify_trade(ticker, signal, strategy, order, result)
             else:
                 logger.error(f"❌ Order failed: {result.message}")
                 
@@ -281,7 +335,13 @@ class TradingEngine:
             logger.error(f"Failed to execute trade for {ticker}: {e}", exc_info=True)
             await self._handle_execution_failure(ticker, signal, e)
     
-    async def _log_trade(self, signal: AggregatedSignal, order: Order, result: OrderResult):
+    async def _log_trade(
+        self,
+        signal: AggregatedSignal,
+        strategy: TradingStrategy,
+        order: Order,
+        result: OrderResult
+    ):
         """记录交易到数据库"""
         # TODO: 实现数据库记录
         logger.info(f"Logging trade to database... (TODO)")
@@ -290,6 +350,7 @@ class TradingEngine:
         self,
         ticker: str,
         signal: AggregatedSignal,
+        strategy: TradingStrategy,
         order: Order,
         result: OrderResult
     ):
