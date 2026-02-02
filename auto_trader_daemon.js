@@ -302,34 +302,32 @@ async function initializeClient() {
   const account = await getAccountInfo();
   log(`Account equity: $${account.equity.toFixed(2)}`);
   log(`Available collateral: $${account.freeCollateral.toFixed(2)}`);
+  log(`Current positions: ${account.positions.length}`);
+  
+  // 允许启动即使没有可用保证金（守护进程会监控现有持仓）
+  if (account.equity <= 0) {
+    throw new Error(`Account equity is negative or zero: $${account.equity.toFixed(2)}`);
+  }
   
   if (account.freeCollateral < CONFIG.MIN_TRADE_SIZE_USD) {
-    throw new Error(`Insufficient balance: $${account.freeCollateral.toFixed(2)}`);
+    log(`⚠️  No free collateral for new trades (${account.freeCollateral.toFixed(2)} < ${CONFIG.MIN_TRADE_SIZE_USD})`);
+    log(`Will monitor existing positions only`);
   }
   
   log('✅ Client initialized successfully');
 }
 
 async function getAccountInfo() {
-  // ✅ 从dYdX链上获取真实账户信息
+  // ✅ 从dYdX链上获取真实账户信息（包括持仓价值）
   try {
-    const accountInfo = await dydxData.getAccountInfo();
+    const status = await dydxData.getFullAccountStatus();
     
     // 计算杠杆相关信息
-    const equity = accountInfo.equity;
+    const equity = status.equity; // 总资产（USDC + 持仓市值）
     const maxPositionValue = equity * CONFIG.MAX_POSITION_RATIO;
     
-    // 计算已用保证金（基于链上持仓）
-    const prices = await dydxData.getAllPrices();
-    let usedMargin = 0;
-    
-    for (const pos of accountInfo.positions) {
-      const price = prices[pos.ticker];
-      if (price) {
-        usedMargin += pos.size * price;
-      }
-    }
-    
+    // 已用保证金直接从status获取
+    const usedMargin = status.usedMargin;
     const availableForNewTrades = Math.max(0, maxPositionValue - usedMargin);
     
     return {
@@ -337,7 +335,7 @@ async function getAccountInfo() {
       freeCollateral: availableForNewTrades,
       marginUsage: usedMargin / maxPositionValue,
       onchain: true, // 标记为链上数据
-      positions: accountInfo.positions, // 返回链上持仓
+      positions: status.positions, // 返回链上持仓（包含当前价格）
       leverageInfo: {
         maxLeverage: CONFIG.MAX_POSITION_RATIO,
         currentPositionValue: usedMargin,
