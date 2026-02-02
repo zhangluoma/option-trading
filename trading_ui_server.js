@@ -126,11 +126,13 @@ app.get('/api/trade-history', async (req, res) => {
     // ✅ 合并链上持仓和本地开仓记录
     const mergedPositions = positionTracker.mergePositions(status.positions);
     
-    let trades = mergedPositions.map(pos => ({
-      ...pos,
-      status: 'OPEN',
-      onchain: true, // 标记为链上数据
-    }));
+    // 转换BigInt为Number（JSON序列化需要）
+    let trades = mergedPositions.map(pos => {
+      const cleaned = { ...pos, status: 'OPEN', onchain: true };
+      // 删除BigInt字段
+      delete cleaned.sizeQuantums;
+      return cleaned;
+    });
     
     // 读取历史记录（已平仓 - 从本地文件读取）
     const fs = require('fs');
