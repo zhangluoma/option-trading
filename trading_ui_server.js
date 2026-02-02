@@ -130,9 +130,22 @@ app.get('/api/trade-history', async (req, res) => {
       // 为每个活跃持仓获取当前价格并计算盈亏
       for (const pos of activeData) {
         try {
-          // 调用获取价格的脚本或API
-          // 简化版：直接使用entryPrice，实际应该获取实时价格
-          const currentPrice = pos.entryPrice; // TODO: 获取实时价格
+          // 从Coinbase获取实时价格
+          let currentPrice = pos.entryPrice;
+          
+          try {
+            const { stdout } = await execPromise(`node get_current_price.js ${pos.ticker}`, {
+              cwd: __dirname,
+              timeout: 5000
+            });
+            const price = parseFloat(stdout.trim());
+            if (!isNaN(price) && price > 0) {
+              currentPrice = price;
+            }
+          } catch (e) {
+            // 获取价格失败，使用开仓价
+            console.error(`Failed to get price for ${pos.ticker}:`, e.message);
+          }
           
           const pnl = pos.side === 'LONG'
             ? pos.size * (currentPrice - pos.entryPrice)

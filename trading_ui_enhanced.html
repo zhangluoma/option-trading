@@ -391,7 +391,8 @@
         const hoursHeld = ((new Date() - new Date(pos.openedAt)) / (1000 * 60 * 60)).toFixed(1);
         const value = pos.size * pos.entryPrice;
         const pnl = pos.pnl || 0;
-        const pnlPercent = ((pnl / (pos.size * pos.entryPrice)) * 100).toFixed(2);
+        const pnlPercent = (pos.pnlPercent || 0).toFixed(2);
+        const currentPrice = pos.currentPrice || pos.entryPrice;
         
         html += `
           <div class="position-card">
@@ -411,7 +412,11 @@
               </div>
               <div class="detail-item">
                 <div>开仓价</div>
-                <div class="detail-value">$${pos.entryPrice.toFixed(2)}</div>
+                <div class="detail-value">$${pos.entryPrice.toFixed(4)}</div>
+              </div>
+              <div class="detail-item">
+                <div>当前价</div>
+                <div class="detail-value">$${currentPrice.toFixed(4)}</div>
               </div>
               <div class="detail-item">
                 <div>价值</div>
@@ -475,12 +480,22 @@
 
     function updateStats(trades) {
       const closedTrades = trades.filter(t => t.status === 'CLOSED');
-      const totalPnl = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      const openTrades = trades.filter(t => t.status === 'OPEN');
+      
+      // 已实现盈亏（已平仓）
+      const realizedPnl = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      
+      // 未实现盈亏（活跃持仓）
+      const unrealizedPnl = openTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+      
+      // 总盈亏 = 已实现 + 未实现
+      const totalPnl = realizedPnl + unrealizedPnl;
+      
       const winningTrades = closedTrades.filter(t => t.pnl > 0).length;
       const totalTrades = closedTrades.length;
       const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100).toFixed(1) : 0;
       
-      // 计算当前资金（初始资金 + 总盈亏）
+      // 计算当前资金（初始资金 + 已实现盈亏 + 未实现盈亏）
       const initialEquity = 162.25;
       const currentEquity = initialEquity + totalPnl;
       const progressPercent = (currentEquity / 5000 * 100).toFixed(1);
