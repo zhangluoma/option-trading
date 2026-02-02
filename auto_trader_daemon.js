@@ -47,9 +47,9 @@ const CONFIG = {
   HOLD_DURATION_HOURS: 4, // 持仓4小时后平仓（快速周转）
   MAX_HOLD_DURATION_HOURS: 6, // 最长持仓6小时（强制平仓）
   
-  // 信号阈值 - 降低捕捉更多机会
-  MIN_SIGNAL_STRENGTH: 0.25, // 最小信号强度（降低）
-  MIN_SIGNAL_CONFIDENCE: 0.25, // 最小信号置信度（降低）
+  // 信号阈值 - 激进模式：尽可能抓住机会
+  MIN_SIGNAL_STRENGTH: 0.15, // 最小信号强度（非常低，激进）
+  MIN_SIGNAL_CONFIDENCE: 0.15, // 最小信号置信度（非常低，激进）
   
   // 风险管理
   MAX_POSITIONS: 8, // 最多同时持有8个仓位（增加）
@@ -572,18 +572,34 @@ async function executeTrade(signal, totalEquity) {
   
   log(`   Current price: $${currentPrice.toFixed(2)}`);
   
-  // 2. 计算仓位大小
+  // 2. 计算仓位大小（激进模式：确保每笔至少最小金额）
   const maxPositionValue = totalEquity * CONFIG.MAX_SINGLE_POSITION_RATIO;
-  const basePositionValue = Math.min(maxPositionValue, totalEquity * 0.05); // 基础5%
   
-  // 根据信号质量调整仓位
-  const positionValue = basePositionValue * final_score;
+  // 基础仓位：根据信号强度动态分配
+  let basePositionValue;
+  if (final_score >= 0.5) {
+    // 强信号：10-20%
+    basePositionValue = totalEquity * (0.10 + final_score * 0.10);
+  } else if (final_score >= 0.3) {
+    // 中等信号：7-10%
+    basePositionValue = totalEquity * 0.07;
+  } else {
+    // 弱信号：5%（最小）
+    basePositionValue = totalEquity * 0.05;
+  }
+  
+  // 确保不超过最大限制
+  basePositionValue = Math.min(basePositionValue, maxPositionValue);
+  
+  // 确保至少达到最小交易金额
+  const positionValue = Math.max(basePositionValue, CONFIG.MIN_TRADE_SIZE_USD * 1.2);
+  
   const size = positionValue / currentPrice;
   
   // 根据市场最小单位调整
   const roundedSize = Math.max(0.001, parseFloat(size.toFixed(3)));
   
-  log(`   Position size: ${roundedSize} ${ticker} (~$${(roundedSize * currentPrice).toFixed(2)})`);
+  log(`   Position size: ${roundedSize} ${ticker} (~$${(roundedSize * currentPrice).toFixed(2)}) [score: ${final_score.toFixed(2)}]`);
   
   if (roundedSize * currentPrice < CONFIG.MIN_TRADE_SIZE_USD) {
     throw new Error(`Position size too small: $${(roundedSize * currentPrice).toFixed(2)}`);

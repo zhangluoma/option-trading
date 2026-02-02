@@ -75,9 +75,9 @@ async function getCompositeSignal(ticker) {
     if (trendDirection === 'BULLISH') trendSignalType = 'BUY';
     if (trendDirection === 'BEARISH') trendSignalType = 'SELL';
     
-    // 权重配置
-    const SENTIMENT_WEIGHT = 0.6; // Sentiment权重60%
-    const TREND_WEIGHT = 0.4;     // Trend权重40%
+    // 权重配置（激进模式：更重视sentiment）
+    const SENTIMENT_WEIGHT = 0.75; // Sentiment权重75%
+    const TREND_WEIGHT = 0.25;     // Trend权重25%
     
     // 计算加权分数
     let compositeScore = 0;
