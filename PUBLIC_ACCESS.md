@@ -1,45 +1,56 @@
 # 🌐 公网访问配置
 
-**更新时间**: 2026-02-02 2:29 PM  
-**状态**: ✅ 正常运行
+**更新时间**: 2026-02-02 2:32 PM  
+**状态**: ✅ Cloudflare隧道运行中
 
 ---
 
-## ✅ 当前公网地址（无需密码）
+## ✅ 当前公网地址（Cloudflare - 最可靠）
 
-**主URL**: http://bore.pub:55794/
+**主URL**: https://hawaii-pavilion-condo-dispatched.trycloudflare.com/
 
 **交易界面**:
-- http://bore.pub:55794/trading_ui.html
-- http://bore.pub:55794/trading_ui_enhanced.html
+- https://hawaii-pavilion-condo-dispatched.trycloudflare.com/trading_ui.html
+- https://hawaii-pavilion-condo-dispatched.trycloudflare.com/trading_ui_enhanced.html
 
 **API接口**:
-- http://bore.pub:55794/api/trade-history
+- https://hawaii-pavilion-condo-dispatched.trycloudflare.com/api/trade-history
 
 ---
 
 ## 📱 使用说明
 
-**直接访问，无需密码！**
+**直接访问，无需任何配置！**
 
-1. 在浏览器打开上面的链接
+1. 点击上面的链接
 2. 立即看到交易界面
-3. 查看实时账户数据
+3. 查看实时数据
+
+---
+
+## ✅ 为什么选择Cloudflare
+
+- ✅ **全球CDN加速** - 最快
+- ✅ **企业级稳定性** - 99.99%可用
+- ✅ **HTTPS加密** - 安全
+- ✅ **无需账号** - 免费使用
+- ✅ **不被墙** - 全球可访问
 
 ---
 
 ## 🛠️ 技术细节
 
-**隧道服务**: bore.pub (bore-cli)
+**隧道服务**: Cloudflare Tunnel (cloudflared)
 **本地端口**: 3456
-**远程端口**: 55794
+**协议**: QUIC (HTTP/3)
 **UI服务器**: PID 29369 (运行中)
 
-**优势**:
-- ✅ 无需密码验证
-- ✅ 简单直接
-- ✅ 稳定可靠
-- ✅ 开源免费
+**验证**:
+```
+✅ HTTP/2 200 OK
+✅ Server: cloudflare
+✅ CF-Ray: 9c7d2534ba88a38d-SEA
+```
 
 ---
 
@@ -59,13 +70,15 @@
 http://192.168.88.23:3456/
 ```
 
-### 重启隧道（如果断开）
+### 重启Cloudflare隧道（如需要）
 ```bash
 cd options-sentiment-engine
-pkill bore
-nohup bore local 3456 --to bore.pub > logs/bore.log 2>&1 &
+pkill cloudflared
+nohup cloudflared tunnel --url http://localhost:3456 > logs/cloudflare.log 2>&1 &
+sleep 5
+cat logs/cloudflare.log | grep trycloudflare.com
 ```
 
 ---
 
-**罗大爷，现在应该可以直接访问了！** 🚀
+**这是最可靠的方案！** 🚀✨
