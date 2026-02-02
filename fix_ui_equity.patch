@@ -1,0 +1,46 @@
+--- trading_ui_enhanced.html.old
++++ trading_ui_enhanced.html
+@@ -453,14 +453,20 @@
+     
+     function fetchData() {
+       fetch('/api/trade-history')
+         .then(res => res.json())
+         .then(data => {
+           if (data.success) {
++            // ✅ 保存API返回的真实equity
++            window.currentEquity = data.equity || 161.13;
++            window.usedMargin = data.usedMargin || 0;
++            window.availableMargin = data.availableMargin || 0;
++            
+             updateTradeTable(data.trades);
+             updateStats(data.trades);
+           }
+         })
+         .catch(err => console.error('Failed to fetch data:', err));
+     }
+
+@@ -496,11 +502,20 @@
+       const totalTrades = closedTrades.length;
+       const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100).toFixed(1) : 0;
+       
+-      // 计算当前资金（初始资金 + 已实现盈亏 + 未实现盈亏）
+-      const initialEquity = 162.25;
+-      const currentEquity = initialEquity + totalPnl;
++      // ✅ 使用API返回的真实equity（链上数据）
++      // 不要重复计算已平仓盈亏，它已经反映在equity中了
++      const currentEquity = window.currentEquity || 161.13;
++      
++      // 总已实现盈亏（仅用于展示）
++      const totalRealizedPnl = realizedPnl;
++      
++      // 总盈亏 = 已实现 + 未实现（仅用于展示）
++      const displayTotalPnl = totalPnl;
++      
+       const progressPercent = (currentEquity / 5000 * 100).toFixed(1);
+       
+       // 更新显示
+       document.getElementById('current-equity').textContent = `$${currentEquity.toFixed(2)}`;
+-      document.getElementById('total-pnl').textContent = `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`;
++      // 显示已实现盈亏
++      document.getElementById('total-pnl').textContent = `${totalRealizedPnl >= 0 ? '+' : ''}$${totalRealizedPnl.toFixed(2)}`;
+       document.getElementById('total-trades').textContent = totalTrades;
