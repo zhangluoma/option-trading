@@ -27,34 +27,49 @@ const {
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { getCompositeSignal } = require('./composite_signal');
 
 // ==================== 配置 ====================
 
 const CONFIG = {
-  // 检查间隔（毫秒）
-  CHECK_INTERVAL_MS: 10 * 60 * 1000, // 10分钟
+  // 检查间隔（毫秒）- 激进模式：3分钟
+  CHECK_INTERVAL_MS: 3 * 60 * 1000, // 3分钟（快速抓住机会）
   
   // 账户资金（从.env读取或使用默认值）
   INITIAL_EQUITY: 162.25, // 初始资金（USDC）
   
-  // 仓位管理
-  MAX_POSITION_RATIO: 0.50, // 最大仓位利用率 50%
-  MIN_TRADE_SIZE_USD: 20, // 最小交易金额 $20
-  MAX_SINGLE_POSITION_RATIO: 0.10, // 单个币种最大占总资产的比例 10%
+  // 仓位管理 - 激进模式：80%利用率
+  MAX_POSITION_RATIO: 0.80, // 最大仓位利用率 80%（激进）
+  MIN_TRADE_SIZE_USD: 15, // 最小交易金额 $15（降低门槛）
+  MAX_SINGLE_POSITION_RATIO: 0.40, // 单个币种最大占总资产的比例 40%（激进）
   
-  // 持仓管理
-  HOLD_DURATION_HOURS: 24, // 持仓24小时后平仓
+  // 持仓管理 - 快速周转：4-6小时
+  HOLD_DURATION_HOURS: 4, // 持仓4小时后平仓（快速周转）
+  MAX_HOLD_DURATION_HOURS: 6, // 最长持仓6小时（强制平仓）
   
-  // 信号阈值（已降低用于测试）
-  MIN_SIGNAL_STRENGTH: 0.30, // 最小信号强度 (原0.60)
-  MIN_SIGNAL_CONFIDENCE: 0.30, // 最小信号置信度 (原0.70)
+  // 信号阈值 - 降低捕捉更多机会
+  MIN_SIGNAL_STRENGTH: 0.25, // 最小信号强度（降低）
+  MIN_SIGNAL_CONFIDENCE: 0.25, // 最小信号置信度（降低）
   
   // 风险管理
-  MAX_POSITIONS: 5, // 最多同时持有5个仓位
+  MAX_POSITIONS: 8, // 最多同时持有8个仓位（增加）
+  STOP_LOSS_PERCENT: 0.05, // 止损5%
+  TAKE_PROFIT_PERCENT: 0.10, // 止盈10%
+  TRAILING_STOP_TRIGGER: 0.05, // 盈利>5%启动移动止损
+  MAX_DAILY_LOSS: 0.10, // 单日最大亏损10%
+  
+  // 动态仓位（根据信号强度）
+  POSITION_SIZE_MAP: {
+    LOW: 0.10,    // 0.25-0.50: 10%
+    MEDIUM: 0.20, // 0.50-0.70: 20%
+    HIGH: 0.30,   // 0.70-0.90: 30%
+    VERY_HIGH: 0.40, // 0.90+: 40%
+  },
   
   // 日志
   LOG_FILE: './logs/auto_trader.log',
   POSITIONS_FILE: './data/active_positions.json',
+  PERFORMANCE_FILE: './data/performance.json',
 };
 
 // dYdX 支持的主要币种
@@ -136,7 +151,7 @@ function savePositions() {
   }
 }
 
-function saveToHistory(position, closePrice, pnl) {
+function saveToHistory(position, closePrice, pnl, closeReason = 'MANUAL') {
   try {
     const historyFile = './data/trade_history.json';
     const dir = path.dirname(historyFile);
@@ -159,7 +174,8 @@ function saveToHistory(position, closePrice, pnl) {
       closePrice,
       currentPrice: closePrice,
       pnl,
-      pnlPercent: (pnl / (position.size * position.entryPrice)) * 100
+      pnlPercent: (pnl / (position.size * position.entryPrice)) * 100,
+      closeReason,
     });
     
     // 保留最近100条
@@ -168,9 +184,61 @@ function saveToHistory(position, closePrice, pnl) {
     }
     
     fs.writeFileSync(historyFile, JSON.stringify(history, null, 2));
-    log(`Trade saved to history: ${position.ticker}`);
+    log(`Trade saved to history: ${position.ticker} (${closeReason}, PnL: $${pnl.toFixed(2)})`);
+    
+    // 更新性能统计
+    updatePerformanceStats(pnl, closeReason);
   } catch (error) {
     log(`Failed to save trade history: ${error.message}`, 'ERROR');
+  }
+}
+
+function updatePerformanceStats(pnl, closeReason) {
+  try {
+    const perfFile = CONFIG.PERFORMANCE_FILE;
+    const dir = path.dirname(perfFile);
+    
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    let stats = {
+      totalTrades: 0,
+      winningTrades: 0,
+      losingTrades: 0,
+      totalPnl: 0,
+      maxDrawdown: 0,
+      winRate: 0,
+      avgWin: 0,
+      avgLoss: 0,
+      profitFactor: 0,
+      closeReasons: {},
+    };
+    
+    if (fs.existsSync(perfFile)) {
+      stats = JSON.parse(fs.readFileSync(perfFile, 'utf8'));
+    }
+    
+    stats.totalTrades++;
+    stats.totalPnl += pnl;
+    
+    if (pnl > 0) {
+      stats.winningTrades++;
+    } else {
+      stats.losingTrades++;
+    }
+    
+    stats.winRate = stats.totalTrades > 0 ? (stats.winningTrades / stats.totalTrades) * 100 : 0;
+    
+    // 记录平仓原因
+    stats.closeReasons[closeReason] = (stats.closeReasons[closeReason] || 0) + 1;
+    
+    // 更新最后更新时间
+    stats.lastUpdated = new Date().toISOString();
+    
+    fs.writeFileSync(perfFile, JSON.stringify(stats, null, 2));
+  } catch (error) {
+    log(`Failed to update performance stats: ${error.message}`, 'ERROR');
   }
 }
 
@@ -445,7 +513,7 @@ async function checkAndExecuteTrades() {
       }
       
       try {
-        const signal = await getSentimentSignal(ticker);
+        const signal = await getCompositeSignal(ticker);
         
         if (signal.signal_type !== 'NEUTRAL' &&
             signal.strength >= CONFIG.MIN_SIGNAL_STRENGTH &&
@@ -591,13 +659,67 @@ async function checkAndClosePositions() {
   for (const position of [...activePositions]) {
     const hoursHeld = (now - position.openedAt) / (1000 * 60 * 60);
     
-    log(`${position.ticker}: held for ${hoursHeld.toFixed(1)}h`);
+    // 获取当前价格计算PnL
+    const currentPrice = await getCurrentPrice(position.ticker);
+    if (!currentPrice) {
+      log(`${position.ticker}: Can't get price, skip`, 'WARN');
+      continue;
+    }
     
-    if (hoursHeld >= CONFIG.HOLD_DURATION_HOURS) {
-      log(`⏰ ${position.ticker} reached hold duration, closing...`);
+    const pnl = position.side === 'LONG'
+      ? currentPrice - position.entryPrice
+      : position.entryPrice - currentPrice;
+    
+    const pnlPercent = (pnl / position.entryPrice) * 100;
+    
+    log(`${position.ticker}: ${hoursHeld.toFixed(1)}h, PnL: ${pnlPercent.toFixed(2)}%`);
+    
+    let shouldClose = false;
+    let closeReason = '';
+    
+    // 1. 止损检查：亏损超过5%
+    if (pnlPercent <= -CONFIG.STOP_LOSS_PERCENT * 100) {
+      shouldClose = true;
+      closeReason = `STOP_LOSS (${pnlPercent.toFixed(2)}%)`;
+    }
+    
+    // 2. 止盈检查：盈利超过10%
+    else if (pnlPercent >= CONFIG.TAKE_PROFIT_PERCENT * 100) {
+      shouldClose = true;
+      closeReason = `TAKE_PROFIT (${pnlPercent.toFixed(2)}%)`;
+    }
+    
+    // 3. 时间检查：持仓4小时
+    else if (hoursHeld >= CONFIG.HOLD_DURATION_HOURS) {
+      shouldClose = true;
+      closeReason = `TIME_LIMIT (${hoursHeld.toFixed(1)}h)`;
+    }
+    
+    // 4. 强制平仓：持仓6小时
+    else if (hoursHeld >= CONFIG.MAX_HOLD_DURATION_HOURS) {
+      shouldClose = true;
+      closeReason = `FORCE_CLOSE (${hoursHeld.toFixed(1)}h)`;
+    }
+    
+    // 5. 移动止损：盈利>5%时，价格回落到成本价
+    else if (position.maxPnlPercent && position.maxPnlPercent > CONFIG.TRAILING_STOP_TRIGGER * 100) {
+      if (pnlPercent < 0) {
+        shouldClose = true;
+        closeReason = `TRAILING_STOP (was +${position.maxPnlPercent.toFixed(2)}%, now ${pnlPercent.toFixed(2)}%)`;
+      }
+    }
+    
+    // 更新最大盈利记录（用于移动止损）
+    if (!position.maxPnlPercent || pnlPercent > position.maxPnlPercent) {
+      position.maxPnlPercent = pnlPercent;
+      savePositions();
+    }
+    
+    if (shouldClose) {
+      log(`🚨 ${position.ticker}: ${closeReason}, closing...`);
       
       try {
-        await closePosition(position);
+        await closePosition(position, closeReason);
         
         // 从活跃持仓中移除
         const index = activePositions.findIndex(p => p.ticker === position.ticker);
@@ -614,10 +736,11 @@ async function checkAndClosePositions() {
   }
 }
 
-async function closePosition(position) {
+async function closePosition(position, closeReason = 'MANUAL') {
   const { ticker, side, size } = position;
   
   log(`\n📊 Closing position: ${ticker}`);
+  log(`   Reason: ${closeReason}`);
   log(`   Original: ${side} ${size}`);
   
   // 获取当前价格
@@ -643,7 +766,7 @@ async function closePosition(position) {
   if (isDryRun) {
     log(`   [DRY RUN] Would close: ${closeSide} ${size} ${ticker}`);
     // 模拟模式也保存历史
-    saveToHistory(position, currentPrice, pnl);
+    saveToHistory(position, currentPrice, pnl, closeReason);
     return;
   }
   
@@ -670,7 +793,7 @@ async function closePosition(position) {
     log(`   ✅ Position closed: ${tx.hash}`);
     
     // 保存到历史
-    saveToHistory(position, currentPrice, pnl);
+    saveToHistory(position, currentPrice, pnl, closeReason);
     
   } catch (error) {
     throw new Error(`Close order failed: ${error.message}`);
