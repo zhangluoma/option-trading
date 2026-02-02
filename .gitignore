@@ -3,6 +3,13 @@ config/credentials.yaml
 credentials.yaml
 *.key
 *.pem
+.env
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
 
 # Python
 __pycache__/
@@ -22,10 +29,15 @@ build/
 *.sqlite
 *.sqlite3
 database/trading.db
+database/sentiment.db
 
 # Logs
 logs/
 *.log
+
+# Runtime data
+data/*.json
+data/*.pid
 
 # IDE
 .vscode/

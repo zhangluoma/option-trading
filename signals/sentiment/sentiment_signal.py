@@ -252,8 +252,12 @@ class SentimentSignal(BaseSignal):
     
     def _detect_asset_type(self, ticker: str) -> str:
         """简单检测资产类型"""
-        crypto_tickers = {'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'DOT', 'AVAX', 'MATIC'}
-        if ticker in crypto_tickers:
+        crypto_tickers = {
+            'BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'DOT', 'AVAX', 'MATIC',
+            'ATOM', 'LTC', 'LINK', 'UNI', 'AAVE', 'CRV', 'SUSHI', 'MKR',
+            'COMP', 'SNX', 'YFI', 'BAL', 'ZRX', 'ENJ', 'MANA', 'SAND'
+        }
+        if ticker.upper() in crypto_tickers:
             return 'crypto'
         return 'stock'
     

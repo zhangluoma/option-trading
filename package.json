@@ -11,6 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@dydxprotocol/v4-client-js": "^3.4.0"
+    "@dydxprotocol/v4-client-js": "^3.4.0",
+    "bip39": "^3.1.0",
+    "express": "^5.2.1"
   }
 }
