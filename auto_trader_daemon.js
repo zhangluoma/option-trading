@@ -29,6 +29,9 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getCompositeSignal } = require('./composite_signal');
 
+// 优化模块（基于历史数据）
+const optimizations = require('./optimizations');
+
 // dYdX数据模块（链上数据）
 const dydxData = require('./dydx_data');
 
@@ -503,12 +506,27 @@ async function checkAndExecuteTrades() {
       try {
         const signal = await getCompositeSignal(ticker);
         
-        if (signal.signal_type !== 'NEUTRAL' &&
-            signal.strength >= CONFIG.MIN_SIGNAL_STRENGTH &&
-            signal.confidence >= CONFIG.MIN_SIGNAL_CONFIDENCE) {
+        // ✅ 使用优化模块评估信号质量
+        const evaluation = optimizations.evaluateSignalQuality(
+          ticker,
+          signal.signal_type,
+          signal.strength,
+          signal.trend_strength || null
+        );
+        
+        // 记录评估结果
+        if (evaluation.reasons.length > 0) {
+          log(`${ticker} 信号评估: ${evaluation.adjustedSignal.toFixed(3)} (${evaluation.reasons.join(', ')})`);
+        }
+        
+        // 使用调整后的信号和方向特定阈值
+        if (signal.signal_type !== 'NEUTRAL' && evaluation.meetsThreshold) {
           signals.push({
             ticker,
-            ...signal
+            ...signal,
+            adjustedStrength: evaluation.adjustedSignal,
+            tickerScore: evaluation.tickerScore,
+            evaluation: evaluation,
           });
         }
       } catch (error) {
@@ -576,6 +594,17 @@ async function executeTrade(signal, totalEquity) {
   }
   
   let basePositionValue = totalEquity * positionRatio;
+  
+  // ✅ 应用优化模块的动态仓位调整
+  const adjustedRatio = optimizations.calculatePositionSize(
+    1.0, // 基础比例
+    adjustedStrength || final_score,
+    ticker,
+    signal_type
+  );
+  
+  basePositionValue *= adjustedRatio;
+  log(`   仓位调整: x${adjustedRatio.toFixed(2)} (币种评分+方向偏好)`);
   
   // 确保不超过最大限制
   basePositionValue = Math.min(basePositionValue, maxPositionValue);
