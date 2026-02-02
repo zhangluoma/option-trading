@@ -1,166 +1,150 @@
 #!/usr/bin/env node
 /**
- * 性能分析工具
- * 
- * 分析交易历史，找出：
- * 1. 最佳交易时段
- * 2. 最佳币种
- * 3. 最佳信号组合
- * 4. 止损止盈统计
+ * 性能分析工具 - 分析交易历史和信号质量
  */
 
 const fs = require('fs');
 const path = require('path');
 
-function loadTradeHistory() {
-  const historyFile = './data/trade_history.json';
-  
-  if (!fs.existsSync(historyFile)) {
-    return [];
+console.log('\n📊 交易系统性能分析\n');
+console.log('='.repeat(70));
+
+// 读取交易历史
+const historyFile = path.join(__dirname, 'data', 'trade_history.json');
+let trades = [];
+
+if (fs.existsSync(historyFile)) {
+  try {
+    trades = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+    console.log(`\n✅ 已加载 ${trades.length} 条交易记录\n`);
+  } catch (e) {
+    console.error('❌ 读取交易历史失败:', e.message);
+    process.exit(1);
   }
-  
-  return JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+} else {
+  console.log('\n⚠️  没有找到交易历史文件\n');
+  process.exit(0);
 }
 
-function loadPerformanceStats() {
-  const perfFile = './data/performance.json';
-  
-  if (!fs.existsSync(perfFile)) {
-    return null;
-  }
-  
-  return JSON.parse(fs.readFileSync(perfFile, 'utf8'));
+// 过滤已平仓交易
+const closedTrades = trades.filter(t => t.status === 'CLOSED' && t.pnl != null);
+
+if (closedTrades.length === 0) {
+  console.log('⚠️  暂无已平仓交易，等待更多数据...\n');
+  process.exit(0);
 }
 
-function analyzePerformance() {
-  const trades = loadTradeHistory();
-  const perfStats = loadPerformanceStats();
+console.log(`📈 已平仓交易: ${closedTrades.length} 笔\n`);
+
+// 统计分析
+let totalPnl = 0;
+let winTrades = 0;
+let lossTrades = 0;
+let totalWinPnl = 0;
+let totalLossPnl = 0;
+const pnlByTicker = {};
+const pnlBySide = { LONG: 0, SHORT: 0 };
+const countBySide = { LONG: 0, SHORT: 0 };
+
+closedTrades.forEach(trade => {
+  const pnl = trade.pnl || 0;
+  totalPnl += pnl;
   
-  console.log('📊 性能分析报告');
-  console.log('='.repeat(60));
-  console.log('');
-  
-  if (trades.length === 0) {
-    console.log('⚠️  暂无交易历史\n');
-    return;
+  if (pnl > 0) {
+    winTrades++;
+    totalWinPnl += pnl;
+  } else if (pnl < 0) {
+    lossTrades++;
+    totalLossPnl += pnl;
   }
   
-  // 1. 基本统计
-  console.log('📈 基本统计:');
-  console.log(`   总交易数: ${trades.length}`);
-  
-  const closedTrades = trades.filter(t => t.status === 'CLOSED');
-  const winningTrades = closedTrades.filter(t => t.pnl > 0);
-  const losingTrades = closedTrades.filter(t => t.pnl <= 0);
-  
-  const totalPnl = closedTrades.reduce((sum, t) => sum + t.pnl, 0);
-  const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length * 100) : 0;
-  
-  console.log(`   盈利交易: ${winningTrades.length}`);
-  console.log(`   亏损交易: ${losingTrades.length}`);
-  console.log(`   胜率: ${winRate.toFixed(1)}%`);
-  console.log(`   总盈亏: $${totalPnl.toFixed(2)}`);
-  console.log('');
-  
-  // 2. 平均盈亏
-  if (winningTrades.length > 0) {
-    const avgWin = winningTrades.reduce((sum, t) => sum + t.pnl, 0) / winningTrades.length;
-    console.log(`   平均盈利: $${avgWin.toFixed(2)}`);
+  // 按币种统计
+  if (!pnlByTicker[trade.ticker]) {
+    pnlByTicker[trade.ticker] = { pnl: 0, count: 0 };
   }
+  pnlByTicker[trade.ticker].pnl += pnl;
+  pnlByTicker[trade.ticker].count++;
   
-  if (losingTrades.length > 0) {
-    const avgLoss = losingTrades.reduce((sum, t) => sum + t.pnl, 0) / losingTrades.length;
-    console.log(`   平均亏损: $${avgLoss.toFixed(2)}`);
-  }
-  
-  if (winningTrades.length > 0 && losingTrades.length > 0) {
-    const avgWin = winningTrades.reduce((sum, t) => sum + t.pnl, 0) / winningTrades.length;
-    const avgLoss = Math.abs(losingTrades.reduce((sum, t) => sum + t.pnl, 0) / losingTrades.length);
-    const profitFactor = avgWin / avgLoss;
-    console.log(`   盈亏比: ${profitFactor.toFixed(2)}`);
-  }
-  console.log('');
-  
-  // 3. 按币种统计
-  console.log('💰 币种表现:');
-  const byTicker = {};
-  
-  closedTrades.forEach(t => {
-    if (!byTicker[t.ticker]) {
-      byTicker[t.ticker] = { trades: 0, pnl: 0, wins: 0 };
-    }
-    byTicker[t.ticker].trades++;
-    byTicker[t.ticker].pnl += t.pnl;
-    if (t.pnl > 0) byTicker[t.ticker].wins++;
+  // 按方向统计
+  pnlBySide[trade.side] += pnl;
+  countBySide[trade.side]++;
+});
+
+// 输出统计结果
+console.log('💰 总体表现');
+console.log('-'.repeat(70));
+console.log(`总盈亏: $${totalPnl.toFixed(2)}`);
+console.log(`胜率: ${((winTrades / closedTrades.length) * 100).toFixed(1)}% (${winTrades}胜/${lossTrades}负)`);
+console.log(`平均盈利: $${(totalWinPnl / (winTrades || 1)).toFixed(2)}`);
+console.log(`平均亏损: $${(totalLossPnl / (lossTrades || 1)).toFixed(2)}`);
+console.log(`盈亏比: ${(totalWinPnl / Math.abs(totalLossPnl || 1)).toFixed(2)}`);
+console.log('');
+
+// 按币种统计
+console.log('📊 按币种统计');
+console.log('-'.repeat(70));
+Object.keys(pnlByTicker)
+  .sort((a, b) => pnlByTicker[b].pnl - pnlByTicker[a].pnl)
+  .forEach(ticker => {
+    const { pnl, count } = pnlByTicker[ticker];
+    const avgPnl = pnl / count;
+    const icon = pnl > 0 ? '✅' : '❌';
+    console.log(`${icon} ${ticker.padEnd(6)}: $${pnl.toFixed(2).padStart(8)} (${count}笔, 均$${avgPnl.toFixed(2)})`);
   });
-  
-  Object.entries(byTicker)
-    .sort((a, b) => b[1].pnl - a[1].pnl)
-    .forEach(([ticker, stats]) => {
-      const winRate = (stats.wins / stats.trades * 100).toFixed(1);
-      console.log(`   ${ticker}: ${stats.trades}笔, $${stats.pnl.toFixed(2)}, 胜率${winRate}%`);
-    });
-  console.log('');
-  
-  // 4. 平仓原因统计
-  if (perfStats && perfStats.closeReasons) {
-    console.log('🚪 平仓原因:');
-    Object.entries(perfStats.closeReasons)
-      .sort((a, b) => b[1] - a[1])
-      .forEach(([reason, count]) => {
-        console.log(`   ${reason}: ${count}次`);
-      });
-    console.log('');
-  }
-  
-  // 5. 持仓时长统计
-  console.log('⏱️  持仓时长:');
-  const holdTimes = closedTrades.map(t => {
-    const opened = new Date(t.openedAt);
-    const closed = new Date(t.closedAt);
-    return (closed - opened) / (1000 * 60 * 60); // 小时
-  });
-  
-  if (holdTimes.length > 0) {
-    const avgHold = holdTimes.reduce((a, b) => a + b, 0) / holdTimes.length;
-    const minHold = Math.min(...holdTimes);
-    const maxHold = Math.max(...holdTimes);
-    
-    console.log(`   平均: ${avgHold.toFixed(1)}h`);
-    console.log(`   最短: ${minHold.toFixed(1)}h`);
-    console.log(`   最长: ${maxHold.toFixed(1)}h`);
-  }
-  console.log('');
-  
-  // 6. 最佳/最差交易
-  if (closedTrades.length > 0) {
-    const bestTrade = closedTrades.reduce((best, t) => t.pnl > best.pnl ? t : best);
-    const worstTrade = closedTrades.reduce((worst, t) => t.pnl < worst.pnl ? t : worst);
-    
-    console.log('🏆 最佳交易:');
-    console.log(`   ${bestTrade.ticker} ${bestTrade.side} $${bestTrade.pnl.toFixed(2)} (${bestTrade.pnlPercent.toFixed(2)}%)`);
-    console.log('');
-    
-    console.log('📉 最差交易:');
-    console.log(`   ${worstTrade.ticker} ${worstTrade.side} $${worstTrade.pnl.toFixed(2)} (${worstTrade.pnlPercent.toFixed(2)}%)`);
-    console.log('');
-  }
-  
-  // 7. 资金增长
-  console.log('💵 资金增长:');
-  console.log(`   初始资金: $162.25`);
-  console.log(`   当前资金: $${(162.25 + totalPnl).toFixed(2)}`);
-  console.log(`   增长: ${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} (${(totalPnl / 162.25 * 100).toFixed(2)}%)`);
-  console.log(`   目标: $5000.00`);
-  console.log(`   进度: ${((162.25 + totalPnl) / 5000 * 100).toFixed(1)}%`);
-  console.log('');
-  
-  console.log('='.repeat(60));
+console.log('');
+
+// 按方向统计
+console.log('🎯 按方向统计');
+console.log('-'.repeat(70));
+['LONG', 'SHORT'].forEach(side => {
+  const pnl = pnlBySide[side];
+  const count = countBySide[side];
+  const avgPnl = count > 0 ? pnl / count : 0;
+  const icon = pnl > 0 ? '✅' : '❌';
+  console.log(`${icon} ${side.padEnd(6)}: $${pnl.toFixed(2).padStart(8)} (${count}笔, 均$${avgPnl.toFixed(2)})`);
+});
+console.log('');
+
+// 最近5笔交易
+console.log('📝 最近5笔交易');
+console.log('-'.repeat(70));
+closedTrades.slice(-5).reverse().forEach((trade, i) => {
+  const pnl = trade.pnl || 0;
+  const pnlPercent = trade.pnlPercent || 0;
+  const icon = pnl > 0 ? '✅' : '❌';
+  const reason = trade.closeReason || 'UNKNOWN';
+  console.log(`${icon} ${trade.ticker} ${trade.side}: $${pnl.toFixed(2)} (${pnlPercent.toFixed(2)}%) - ${reason}`);
+});
+console.log('');
+
+// 建议
+console.log('💡 优化建议');
+console.log('-'.repeat(70));
+
+if (winTrades / closedTrades.length < 0.4) {
+  console.log('⚠️  胜率偏低（<40%），建议：');
+  console.log('   - 提高信号阈值');
+  console.log('   - 改进趋势过滤');
+  console.log('   - 检查止损/止盈设置');
 }
 
-// 运行
-if (require.main === module) {
-  analyzePerformance();
+if (Math.abs(totalWinPnl) < Math.abs(totalLossPnl)) {
+  console.log('⚠️  盈亏比不足1.0，建议：');
+  console.log('   - 扩大止盈目标');
+  console.log('   - 收紧止损范围');
+  console.log('   - 使用移动止损');
 }
 
-module.exports = { analyzePerformance };
+// 找出表现最差的币种
+const worstTicker = Object.keys(pnlByTicker)
+  .sort((a, b) => pnlByTicker[a].pnl - pnlByTicker[b].pnl)[0];
+
+if (worstTicker && pnlByTicker[worstTicker].pnl < -10) {
+  console.log(`⚠️  ${worstTicker} 表现最差（$${pnlByTicker[worstTicker].pnl.toFixed(2)}），建议：`);
+  console.log(`   - 暂时禁用 ${worstTicker} 交易`);
+  console.log(`   - 检查 ${worstTicker} 的信号质量`);
+}
+
+console.log('');
+console.log('='.repeat(70));
+console.log('');
