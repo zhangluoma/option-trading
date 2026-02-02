@@ -38,10 +38,15 @@ const CONFIG = {
   // 账户资金（从.env读取或使用默认值）
   INITIAL_EQUITY: 162.25, // 初始资金（USDC）
   
-  // 仓位管理 - 激进模式：80%利用率
-  MAX_POSITION_RATIO: 0.80, // 最大仓位利用率 80%（激进）
+  // 仓位管理 - 超激进模式：300%杠杆（dYdX支持）
+  MAX_POSITION_RATIO: 3.0, // 最大仓位利用率 300%（3倍杠杆）
   MIN_TRADE_SIZE_USD: 15, // 最小交易金额 $15（降低门槛）
-  MAX_SINGLE_POSITION_RATIO: 0.40, // 单个币种最大占总资产的比例 40%（激进）
+  MAX_SINGLE_POSITION_RATIO: 1.0, // 单个币种最大占总资产的比例 100%（杠杆交易）
+  
+  // 杠杆说明：
+  // dYdX支持保证金交易，可以开仓超过账户余额
+  // 300%杠杆 = 用$162的账户开$486的仓位
+  // ⚠️ 风险：杠杆越高，爆仓风险越大
   
   // 持仓管理 - 快速周转：4-6小时
   HOLD_DURATION_HOURS: 4, // 持仓4小时后平仓（快速周转）
@@ -51,19 +56,23 @@ const CONFIG = {
   MIN_SIGNAL_STRENGTH: 0.15, // 最小信号强度（非常低，激进）
   MIN_SIGNAL_CONFIDENCE: 0.15, // 最小信号置信度（非常低，激进）
   
-  // 风险管理
+  // 风险管理 - 杠杆模式：更严格止损
   MAX_POSITIONS: 8, // 最多同时持有8个仓位（增加）
-  STOP_LOSS_PERCENT: 0.05, // 止损5%
-  TAKE_PROFIT_PERCENT: 0.10, // 止盈10%
+  STOP_LOSS_PERCENT: 0.03, // 止损3%（杠杆3x = 实际-9%）
+  TAKE_PROFIT_PERCENT: 0.10, // 止盈10%（杠杆3x = 实际+30%）
   TRAILING_STOP_TRIGGER: 0.05, // 盈利>5%启动移动止损
-  MAX_DAILY_LOSS: 0.10, // 单日最大亏损10%
+  MAX_DAILY_LOSS: 0.05, // 单日最大亏损5%（杠杆下更严格）
   
-  // 动态仓位（根据信号强度）
+  // 杠杆风险提示：
+  // 3倍杠杆下，3%波动 = 9%账户资金变化
+  // 必须严格止损，避免爆仓
+  
+  // 动态仓位（根据信号强度）- 杠杆模式
   POSITION_SIZE_MAP: {
-    LOW: 0.10,    // 0.25-0.50: 10%
-    MEDIUM: 0.20, // 0.50-0.70: 20%
-    HIGH: 0.30,   // 0.70-0.90: 30%
-    VERY_HIGH: 0.40, // 0.90+: 40%
+    LOW: 0.30,    // 0.25-0.50: 30% (with leverage)
+    MEDIUM: 0.50, // 0.50-0.70: 50%
+    HIGH: 0.75,   // 0.70-0.90: 75%
+    VERY_HIGH: 1.0, // 0.90+: 100%
   },
   
   // 日志
@@ -301,16 +310,25 @@ async function getAccountInfo() {
   // 从配置或环境变量读取初始资金
   const initialEquity = parseFloat(process.env.INITIAL_EQUITY || CONFIG.INITIAL_EQUITY || 100);
   
-  // 基于本地持仓计算已用资金
+  // 基于本地持仓计算已用资金（仓位总价值）
   const estimatedUsed = activePositions.reduce((sum, pos) => {
     return sum + (pos.size * pos.entryPrice);
   }, 0);
   
+  // 杠杆模式：最大可用 = 初始资金 × 杠杆倍数
+  const maxPositionValue = initialEquity * CONFIG.MAX_POSITION_RATIO;
+  const availableForNewTrades = Math.max(0, maxPositionValue - estimatedUsed);
+  
   return {
     equity: initialEquity,
-    freeCollateral: Math.max(0, initialEquity - estimatedUsed),
-    marginUsage: estimatedUsed / initialEquity,
+    freeCollateral: availableForNewTrades, // 基于杠杆的可用保证金
+    marginUsage: estimatedUsed / maxPositionValue, // 使用率基于最大可用
     fromCache: true,
+    leverageInfo: {
+      maxLeverage: CONFIG.MAX_POSITION_RATIO,
+      currentPositionValue: estimatedUsed,
+      maxPositionValue: maxPositionValue,
+    }
   };
 }
 
@@ -572,21 +590,22 @@ async function executeTrade(signal, totalEquity) {
   
   log(`   Current price: $${currentPrice.toFixed(2)}`);
   
-  // 2. 计算仓位大小（激进模式：确保每笔至少最小金额）
+  // 2. 计算仓位大小（杠杆模式：根据信号强度动态分配）
   const maxPositionValue = totalEquity * CONFIG.MAX_SINGLE_POSITION_RATIO;
   
-  // 基础仓位：根据信号强度动态分配
-  let basePositionValue;
-  if (final_score >= 0.5) {
-    // 强信号：10-20%
-    basePositionValue = totalEquity * (0.10 + final_score * 0.10);
-  } else if (final_score >= 0.3) {
-    // 中等信号：7-10%
-    basePositionValue = totalEquity * 0.07;
+  // 基础仓位：根据信号强度使用POSITION_SIZE_MAP
+  let positionRatio;
+  if (final_score >= 0.90) {
+    positionRatio = CONFIG.POSITION_SIZE_MAP.VERY_HIGH; // 100%
+  } else if (final_score >= 0.70) {
+    positionRatio = CONFIG.POSITION_SIZE_MAP.HIGH; // 75%
+  } else if (final_score >= 0.50) {
+    positionRatio = CONFIG.POSITION_SIZE_MAP.MEDIUM; // 50%
   } else {
-    // 弱信号：5%（最小）
-    basePositionValue = totalEquity * 0.05;
+    positionRatio = CONFIG.POSITION_SIZE_MAP.LOW; // 30%
   }
+  
+  let basePositionValue = totalEquity * positionRatio;
   
   // 确保不超过最大限制
   basePositionValue = Math.min(basePositionValue, maxPositionValue);
