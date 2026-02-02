@@ -663,20 +663,35 @@ async function executeTrade(signal, totalEquity) {
 async function checkAndClosePositions() {
   log('🔍 Checking positions for closing...');
   
-  if (activePositions.length === 0) {
+  // ✅ 从链上获取真实持仓
+  const status = await dydxData.getFullAccountStatus();
+  const onchainPositions = status.positions;
+  
+  if (!onchainPositions || onchainPositions.length === 0) {
     log('No active positions to check');
     return;
   }
   
   const now = new Date();
   
-  for (const position of [...activePositions]) {
-    const hoursHeld = (now - position.openedAt) / (1000 * 60 * 60);
+  // ✅ 合并链上持仓和本地tracker数据
+  const mergedPositions = positionTracker.mergePositions(onchainPositions);
+  
+  for (const position of mergedPositions) {
+    // 如果没有entry price，无法计算PnL，跳过
+    if (!position.entryPrice) {
+      log(`${position.ticker}: No entry price, skip monitoring`, 'WARN');
+      continue;
+    }
     
-    // 获取当前价格计算PnL
-    const currentPrice = await getCurrentPrice(position.ticker);
+    const hoursHeld = position.openedAt 
+      ? (now - position.openedAt) / (1000 * 60 * 60)
+      : 0;
+    
+    // 使用链上当前价格
+    const currentPrice = position.currentPrice;
     if (!currentPrice) {
-      log(`${position.ticker}: Can't get price, skip`, 'WARN');
+      log(`${position.ticker}: No current price, skip`, 'WARN');
       continue;
     }
     
@@ -723,10 +738,9 @@ async function checkAndClosePositions() {
       }
     }
     
-    // 更新最大盈利记录（用于移动止损）
+    // 更新最大盈利记录（用于移动止损）- 存储到tracker
     if (!position.maxPnlPercent || pnlPercent > position.maxPnlPercent) {
-      position.maxPnlPercent = pnlPercent;
-      savePositions();
+      positionTracker.updateMaxPnl(position.ticker, pnlPercent);
     }
     
     if (shouldClose) {
@@ -735,7 +749,10 @@ async function checkAndClosePositions() {
       try {
         await closePosition(position, closeReason);
         
-        // 从活跃持仓中移除
+        // ✅ 平仓后从tracker移除
+        positionTracker.removeEntry(position.ticker);
+        
+        // 同步清理本地activePositions（向后兼容）
         const index = activePositions.findIndex(p => p.ticker === position.ticker);
         if (index !== -1) {
           activePositions.splice(index, 1);

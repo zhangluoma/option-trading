@@ -97,6 +97,25 @@ function removeEntry(ticker) {
 }
 
 /**
+ * 更新最大盈利记录（用于移动止损）
+ */
+function updateMaxPnl(ticker, pnlPercent) {
+  if (!fs.existsSync(TRACKER_FILE)) {
+    return;
+  }
+  
+  try {
+    const entries = JSON.parse(fs.readFileSync(TRACKER_FILE, 'utf8'));
+    if (entries[ticker]) {
+      entries[ticker].maxPnlPercent = pnlPercent;
+      fs.writeFileSync(TRACKER_FILE, JSON.stringify(entries, null, 2));
+    }
+  } catch (e) {
+    console.error('Failed to update max PnL:', e.message);
+  }
+}
+
+/**
  * 合并链上持仓和开仓记录
  */
 function mergePositions(onchainPositions) {
@@ -120,8 +139,9 @@ function mergePositions(onchainPositions) {
       merged.push({
         ...pos,
         entryPrice,
-        openedAt: entry.openedAt,
+        openedAt: new Date(entry.openedAt),
         clientId: entry.clientId,
+        maxPnlPercent: entry.maxPnlPercent || null,
         pnl,
         pnlPercent,
       });
@@ -146,6 +166,7 @@ module.exports = {
   getEntry,
   getAllEntries,
   removeEntry,
+  updateMaxPnl,
   mergePositions,
 };
 
