@@ -1,66 +1,45 @@
 # 🌐 公网访问配置
 
-**更新时间**: 2026-02-02 2:27 PM
+**更新时间**: 2026-02-02 2:29 PM  
+**状态**: ✅ 正常运行
 
 ---
 
-## ✅ 当前公网地址
+## ✅ 当前公网地址（无需密码）
 
-**主URL**: https://smooth-bushes-arrive.loca.lt/
+**主URL**: http://bore.pub:55794/
 
 **交易界面**:
-- https://smooth-bushes-arrive.loca.lt/trading_ui.html
-- https://smooth-bushes-arrive.loca.lt/trading_ui_enhanced.html
+- http://bore.pub:55794/trading_ui.html
+- http://bore.pub:55794/trading_ui_enhanced.html
 
 **API接口**:
-- https://smooth-bushes-arrive.loca.lt/api/trade-history
+- http://bore.pub:55794/api/trade-history
 
 ---
 
-## 📱 首次访问步骤
+## 📱 使用说明
 
-1. 打开上面的链接
-2. 如果看到localtunnel警告页面，点击 "Click to Continue"
-3. 进入交易界面，查看实时数据
+**直接访问，无需密码！**
 
----
-
-## 🔄 备用方案
-
-### 方案A：局域网访问（同一WiFi）
-```
-http://192.168.88.23:3456/
-```
-
-### 方案B：手机热点共享
-1. 手机开热点
-2. 电脑连接手机热点
-3. 在手机浏览器访问：http://192.168.88.23:3456/
-
-### 方案C：TeamViewer/远程桌面
-远程连接到Mac，直接在本地访问
+1. 在浏览器打开上面的链接
+2. 立即看到交易界面
+3. 查看实时账户数据
 
 ---
 
 ## 🛠️ 技术细节
 
-**隧道服务**: localtunnel (npm)
+**隧道服务**: bore.pub (bore-cli)
 **本地端口**: 3456
+**远程端口**: 55794
 **UI服务器**: PID 29369 (运行中)
-**隧道进程**: PID 33558 (运行中)
 
-**检查命令**:
-```bash
-# 检查UI服务器
-ps aux | grep trading_ui_server
-
-# 检查隧道
-ps aux | grep "lt --port"
-
-# 重启隧道
-pkill -f "lt --port"
-nohup lt --port 3456 > logs/localtunnel.log 2>&1 &
-```
+**优势**:
+- ✅ 无需密码验证
+- ✅ 简单直接
+- ✅ 稳定可靠
+- ✅ 开源免费
 
 ---
 
@@ -68,9 +47,25 @@ nohup lt --port 3456 > logs/localtunnel.log 2>&1 &
 
 - Net Worth: $161.71
 - 持仓: 4个 (BTC/LINK/DOGE/ATOM)
-- 守护进程: 正常运行
+- 守护进程: PID 31087 (运行中)
 - 数据来源: 100% dYdX链上
 
 ---
 
-**问题？随时告诉我！** 🚀
+## 🔄 备用方案
+
+### 局域网访问（同一WiFi）
+```
+http://192.168.88.23:3456/
+```
+
+### 重启隧道（如果断开）
+```bash
+cd options-sentiment-engine
+pkill bore
+nohup bore local 3456 --to bore.pub > logs/bore.log 2>&1 &
+```
+
+---
+
+**罗大爷，现在应该可以直接访问了！** 🚀
