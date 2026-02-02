@@ -29,6 +29,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getCompositeSignal } = require('./composite_signal');
 
+// dYdX数据模块（链上数据）
+const dydxData = require('./dydx_data');
+
+// 持仓追踪器（记录开仓信息）
+const positionTracker = require('./position_tracker');
+
 // ==================== 配置 ====================
 
 const CONFIG = {
@@ -305,87 +311,53 @@ async function initializeClient() {
 }
 
 async function getAccountInfo() {
-  // 完全使用本地跟踪，不再调用Indexer
-  
-  // 从配置或环境变量读取初始资金
-  const initialEquity = parseFloat(process.env.INITIAL_EQUITY || CONFIG.INITIAL_EQUITY || 100);
-  
-  // 基于本地持仓计算已用资金（仓位总价值）
-  const estimatedUsed = activePositions.reduce((sum, pos) => {
-    return sum + (pos.size * pos.entryPrice);
-  }, 0);
-  
-  // 杠杆模式：最大可用 = 初始资金 × 杠杆倍数
-  const maxPositionValue = initialEquity * CONFIG.MAX_POSITION_RATIO;
-  const availableForNewTrades = Math.max(0, maxPositionValue - estimatedUsed);
-  
-  return {
-    equity: initialEquity,
-    freeCollateral: availableForNewTrades, // 基于杠杆的可用保证金
-    marginUsage: estimatedUsed / maxPositionValue, // 使用率基于最大可用
-    fromCache: true,
-    leverageInfo: {
-      maxLeverage: CONFIG.MAX_POSITION_RATIO,
-      currentPositionValue: estimatedUsed,
-      maxPositionValue: maxPositionValue,
+  // ✅ 从dYdX链上获取真实账户信息
+  try {
+    const accountInfo = await dydxData.getAccountInfo();
+    
+    // 计算杠杆相关信息
+    const equity = accountInfo.equity;
+    const maxPositionValue = equity * CONFIG.MAX_POSITION_RATIO;
+    
+    // 计算已用保证金（基于链上持仓）
+    const prices = await dydxData.getAllPrices();
+    let usedMargin = 0;
+    
+    for (const pos of accountInfo.positions) {
+      const price = prices[pos.ticker];
+      if (price) {
+        usedMargin += pos.size * price;
+      }
     }
-  };
+    
+    const availableForNewTrades = Math.max(0, maxPositionValue - usedMargin);
+    
+    return {
+      equity,
+      freeCollateral: availableForNewTrades,
+      marginUsage: usedMargin / maxPositionValue,
+      onchain: true, // 标记为链上数据
+      positions: accountInfo.positions, // 返回链上持仓
+      leverageInfo: {
+        maxLeverage: CONFIG.MAX_POSITION_RATIO,
+        currentPositionValue: usedMargin,
+        maxPositionValue,
+      }
+    };
+  } catch (error) {
+    log(`Failed to get account info from chain: ${error.message}`, 'ERROR');
+    throw error;
+  }
 }
 
 async function getCurrentPrice(ticker) {
-  // 使用Coinbase现货价格作为参考（不是dYdX Indexer，避免封号）
-  // Coinbase价格与链上oracle价格基本一致，且无地域限制
+  // ✅ 从dYdX获取Oracle价格（链上真实价格）
   try {
-    const https = require('https');
-    
-    // 支持的币种（Coinbase格式）
-    const supportedTickers = [
-      'BTC', 'ETH', 'SOL', 'AVAX', 'DOGE', 'MATIC', 
-      'DOT', 'ATOM', 'LTC', 'LINK', 'UNI', 'AAVE'
-    ];
-    
-    if (!supportedTickers.includes(ticker)) {
-      log(`Ticker ${ticker} not supported, using cache`, 'WARN');
-      return getLastKnownPrice(ticker);
-    }
-    
-    return new Promise((resolve) => {
-      // 使用Coinbase公开API（无需认证，无地域限制）
-      const url = `https://api.coinbase.com/v2/prices/${ticker}-USD/spot`;
-      
-      https.get(url, (res) => {
-        let data = '';
-        
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            const price = parseFloat(json.data.amount);
-            
-            if (price && price > 0) {
-              updatePriceCache(ticker, price);
-              resolve(price);
-            } else {
-              log(`Invalid price for ${ticker}`, 'WARN');
-              resolve(getLastKnownPrice(ticker));
-            }
-          } catch (e) {
-            log(`Failed to parse Coinbase price for ${ticker}: ${e.message}`, 'WARN');
-            resolve(getLastKnownPrice(ticker));
-          }
-        });
-      }).on('error', (error) => {
-        log(`Failed to get Coinbase price for ${ticker}: ${error.message}`, 'WARN');
-        resolve(getLastKnownPrice(ticker));
-      });
-    });
-    
+    const price = await dydxData.getPrice(ticker);
+    return price;
   } catch (error) {
-    log(`Error in getCurrentPrice: ${error.message}`, 'ERROR');
-    return getLastKnownPrice(ticker);
+    log(`Failed to get price for ${ticker} from dYdX: ${error.message}`, 'ERROR');
+    throw error;
   }
 }
 
@@ -672,6 +644,15 @@ async function executeTrade(signal, totalEquity) {
     
     savePositions();
     
+    // ✅ 记录开仓信息到tracker（用于后续计算盈亏）
+    positionTracker.recordEntry(
+      ticker,
+      side === OrderSide.BUY ? 'LONG' : 'SHORT',
+      roundedSize,
+      currentPrice,
+      clientId
+    );
+    
     log(`   💾 Position saved to tracking`);
     
   } catch (error) {
@@ -829,6 +810,9 @@ async function closePosition(position, closeReason = 'MANUAL') {
     
     // 保存到历史
     saveToHistory(position, currentPrice, pnl, closeReason);
+    
+    // ✅ 从tracker中删除开仓记录
+    positionTracker.removeEntry(ticker);
     
   } catch (error) {
     throw new Error(`Close order failed: ${error.message}`);

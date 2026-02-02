@@ -9,6 +9,12 @@ const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 
+// dYdX数据模块（链上数据）
+const dydxData = require('./dydx_data');
+
+// 持仓追踪器（记录开仓信息）
+const positionTracker = require('./position_tracker');
+
 const app = express();
 const PORT = 3456;
 
@@ -114,57 +120,23 @@ app.post('/api/limit-order', async (req, res) => {
 // 获取交易历史
 app.get('/api/trade-history', async (req, res) => {
   try {
+    // ✅ 从dYdX链上获取真实持仓和价格
+    const status = await dydxData.getFullAccountStatus();
+    
+    // ✅ 合并链上持仓和本地开仓记录
+    const mergedPositions = positionTracker.mergePositions(status.positions);
+    
+    let trades = mergedPositions.map(pos => ({
+      ...pos,
+      status: 'OPEN',
+      onchain: true, // 标记为链上数据
+    }));
+    
+    // 读取历史记录（已平仓 - 从本地文件读取）
     const fs = require('fs');
     const path = require('path');
-    
-    // 读取活跃持仓
-    const positionsFile = path.join(__dirname, 'data', 'active_positions.json');
     const historyFile = path.join(__dirname, 'data', 'trade_history.json');
     
-    let trades = [];
-    
-    // 读取活跃持仓
-    if (fs.existsSync(positionsFile)) {
-      const activeData = JSON.parse(fs.readFileSync(positionsFile, 'utf8'));
-      
-      // 为每个活跃持仓获取当前价格并计算盈亏
-      for (const pos of activeData) {
-        try {
-          // 从Coinbase获取实时价格
-          let currentPrice = pos.entryPrice;
-          
-          try {
-            const { stdout } = await execPromise(`node get_current_price.js ${pos.ticker}`, {
-              cwd: __dirname,
-              timeout: 5000
-            });
-            const price = parseFloat(stdout.trim());
-            if (!isNaN(price) && price > 0) {
-              currentPrice = price;
-            }
-          } catch (e) {
-            // 获取价格失败，使用开仓价
-            console.error(`Failed to get price for ${pos.ticker}:`, e.message);
-          }
-          
-          const pnl = pos.side === 'LONG'
-            ? pos.size * (currentPrice - pos.entryPrice)
-            : pos.size * (pos.entryPrice - currentPrice);
-          
-          trades.push({
-            ...pos,
-            status: 'OPEN',
-            currentPrice,
-            pnl,
-            pnlPercent: (pnl / (pos.size * pos.entryPrice)) * 100
-          });
-        } catch (error) {
-          console.error(`Failed to process position ${pos.ticker}:`, error);
-        }
-      }
-    }
-    
-    // 读取历史记录（已平仓）
     if (fs.existsSync(historyFile)) {
       const historyData = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
       trades = [...trades, ...historyData];
@@ -176,7 +148,15 @@ app.get('/api/trade-history', async (req, res) => {
     // 限制返回最近50条
     trades = trades.slice(0, 50);
     
-    res.json({ success: true, trades, count: trades.length });
+    res.json({ 
+      success: true, 
+      trades, 
+      count: trades.length,
+      equity: status.equity,
+      usedMargin: status.usedMargin,
+      availableMargin: status.availableMargin,
+      onchain: true 
+    });
   } catch (error) {
     console.error('Failed to get trade history:', error);
     res.json({ success: false, error: error.message, trades: [] });

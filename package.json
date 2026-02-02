@@ -13,6 +13,7 @@
   "dependencies": {
     "@dydxprotocol/v4-client-js": "^3.4.0",
     "bip39": "^3.1.0",
+    "dotenv": "^17.2.3",
     "express": "^5.2.1"
   }
 }
