@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🚀 自动交易系统</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      color: #e0e6ed;
+      padding: 40px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 48px;
+      text-align: center;
+      margin-bottom: 20px;
+      color: #5f67e8;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 24px;
+      color: #9ca3af;
+      margin-bottom: 40px;
+    }
+
+    .links {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    a {
+      display: block;
+      background: #151932;
+      border: 2px solid #252a47;
+      border-radius: 12px;
+      padding: 20px 30px;
+      text-decoration: none;
+      color: #e0e6ed;
+      font-size: 18px;
+      font-weight: 600;
+      transition: all 0.3s;
+      text-align: center;
+    }
+
+    a:hover {
+      background: #1a1f3a;
+      border-color: #5f67e8;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(95, 103, 232, 0.3);
+    }
+
+    .emoji {
+      font-size: 24px;
+      margin-right: 10px;
+    }
+
+    .status {
+      background: #151932;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 30px;
+      border: 1px solid #252a47;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+
+    .status-label {
+      color: #9ca3af;
+    }
+
+    .status-value {
+      color: #10b981;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀</h1>
+    <div class="subtitle">$160 → $5000 挑战</div>
+    
+    <div class="links">
+      <a href="/trading_ui_enhanced.html">
+        <span class="emoji">📊</span>
+        进度追踪 Dashboard
+      </a>
+      
+      <a href="/trading_ui.html">
+        <span class="emoji">🎮</span>
+        手动交易面板
+      </a>
+    </div>
+
+    <div class="status">
+      <h3 style="margin-bottom: 15px; color: #818cf8;">系统状态</h3>
+      <div class="status-item">
+        <span class="status-label">服务器</span>
+        <span class="status-value">✅ 运行中</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">IP地址</span>
+        <span class="status-value">192.168.88.23:3456</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">访问时间</span>
+        <span class="status-value" id="time"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('time').textContent = now.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    
+    updateTime();
+    setInterval(updateTime, 1000);
+  </script>
+</body>
+</html>
