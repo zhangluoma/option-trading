@@ -218,18 +218,26 @@ app.get('/api/networth-history', async (req, res) => {
     const history = await db.getNetworthHistory(hours);
     
     // 计算统计
+    const netWorths = history.map(h => parseFloat(h.netWorth));
+    const first = netWorths.length > 0 ? netWorths[0] : 0;
+    const latest = netWorths.length > 0 ? netWorths[netWorths.length - 1] : 0;
+    const max = netWorths.length > 0 ? Math.max(...netWorths) : 0;
+    const min = netWorths.length > 0 ? Math.min(...netWorths) : 0;
+    const change = latest - first;
+    const changePercent = first !== 0 ? (change / first) * 100 : 0;
+    
     const stats = {
       recordCount: history.length,
-      latestEquity: history.length > 0 ? history[history.length - 1].netWorth : 0,
-      oldestEquity: history.length > 0 ? history[0].netWorth : 0,
-      change: 0,
-      changePercent: 0
+      first,
+      latest,
+      max,
+      min,
+      change,
+      changePercent,
+      // 兼容旧字段
+      latestEquity: latest,
+      oldestEquity: first
     };
-    
-    if (history.length > 1) {
-      stats.change = stats.latestEquity - stats.oldestEquity;
-      stats.changePercent = (stats.change / stats.oldestEquity) * 100;
-    }
     
     res.json({
       success: true,
