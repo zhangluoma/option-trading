@@ -20,21 +20,23 @@ async function getPositionsWithAvgPrice() {
   // 2. 获取所有fills
   const fills = await getFills(100);
   
+  let normalizedFills = [];
+  
   if (fills.length === 0) {
-    console.log('❌ 无fills数据，无法计算均价');
-    return [];
+    console.log('⚠️  暂无fills数据（等待链上扫描或实时捕获）');
+    console.log('   将使用当前价格作为均价（P&L显示0）\n');
+  } else {
+    console.log(`Fills记录: ${fills.length}条\n`);
+    
+    // 3. 标准化fills格式
+    normalizedFills = fills.map(f => ({
+      ticker: f.ticker || (f.market && f.market.replace('-USD', '')),
+      side: f.side,
+      size: parseFloat(f.size),
+      price: parseFloat(f.price),
+      createdAt: f.createdAt
+    }));
   }
-  
-  console.log(`Fills记录: ${fills.length}条\n`);
-  
-  // 3. 标准化fills格式
-  const normalizedFills = fills.map(f => ({
-    ticker: f.ticker || (f.market && f.market.replace('-USD', '')),
-    side: f.side,
-    size: parseFloat(f.size),
-    price: parseFloat(f.price),
-    createdAt: f.createdAt
-  }));
   
   // 4. 为每个持仓计算均价
   const positionsWithAvg = [];
