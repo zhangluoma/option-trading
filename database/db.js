@@ -328,6 +328,56 @@ async function getAllTrades(limit = 100) {
 
 /**
  * ========================================
+ * Networth History API
+ * ========================================
+ */
+
+/**
+ * 记录净值
+ */
+async function recordNetworth(equity, usdcBalance, usedMargin, availableMargin, positionCount = 0) {
+  await pool.query(
+    `INSERT INTO networth_history 
+      (timestamp, equity, usdc_balance, used_margin, available_margin, position_count)
+    VALUES (NOW(), ?, ?, ?, ?, ?)`,
+    [equity, usdcBalance, usedMargin, availableMargin, positionCount]
+  );
+}
+
+/**
+ * 获取最近N小时的净值历史
+ */
+async function getNetworthHistory(hours = 24) {
+  const [rows] = await pool.query(
+    `SELECT 
+      timestamp,
+      equity as netWorth,
+      usdc_balance as usdcBalance,
+      used_margin as usedMargin,
+      available_margin as availableMargin,
+      position_count as positionCount
+    FROM networth_history
+    WHERE timestamp >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+    ORDER BY timestamp ASC`,
+    [hours]
+  );
+  return rows;
+}
+
+/**
+ * 获取最新净值记录
+ */
+async function getLatestNetworth() {
+  const [rows] = await pool.query(
+    `SELECT * FROM networth_history
+    ORDER BY timestamp DESC
+    LIMIT 1`
+  );
+  return rows[0] || null;
+}
+
+/**
+ * ========================================
  * Scanner State API
  * ========================================
  */
@@ -394,6 +444,11 @@ module.exports = {
   saveTrade,
   getActiveTrades,
   getAllTrades,
+  
+  // Networth
+  recordNetworth,
+  getNetworthHistory,
+  getLatestNetworth,
   
   // Scanner State
   getScannerState,

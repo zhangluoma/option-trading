@@ -189,6 +189,45 @@ app.get('/api/scanner-status', async (req, res) => {
 });
 
 /**
+ * API: 净值历史（从MySQL）
+ */
+app.get('/api/networth-history', async (req, res) => {
+  try {
+    if (!dbReady) {
+      return res.json({ success: false, error: 'Database not ready', history: [] });
+    }
+    
+    const hours = parseInt(req.query.hours) || 24;
+    const history = await db.getNetworthHistory(hours);
+    
+    // 计算统计
+    const stats = {
+      recordCount: history.length,
+      latestEquity: history.length > 0 ? history[history.length - 1].netWorth : 0,
+      oldestEquity: history.length > 0 ? history[0].netWorth : 0,
+      change: 0,
+      changePercent: 0
+    };
+    
+    if (history.length > 1) {
+      stats.change = stats.latestEquity - stats.oldestEquity;
+      stats.changePercent = (stats.change / stats.oldestEquity) * 100;
+    }
+    
+    res.json({
+      success: true,
+      history,
+      stats,
+      count: history.length,
+      source: 'MySQL'
+    });
+  } catch (error) {
+    console.error('Failed to get networth history:', error);
+    res.json({ success: false, error: error.message, history: [] });
+  }
+});
+
+/**
  * 主页
  */
 app.get('/', (req, res) => {
@@ -210,6 +249,7 @@ app.listen(PORT, () => {
   console.log(`   /api/fills`);
   console.log(`   /api/positions-with-avg`);
   console.log(`   /api/trades`);
+  console.log(`   /api/networth-history`);
   console.log(`   /api/scanner-status`);
   console.log('='.repeat(60));
 });
