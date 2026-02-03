@@ -75,7 +75,8 @@ class BlockchainPersist {
    * 检查区块是否已处理
    */
   isBlockProcessed(height) {
-    return height <= this.state.lastProcessedHeight;
+    // 检查processedBlocks数组中是否存在
+    return this.state.processedBlocks.some(b => b.height === height);
   }
   
   /**
