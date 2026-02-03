@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🚀 $160→$5000 挑战</title>
-  <!-- Version: 2026-02-03-02:26 - 统计数据修复版 -->
+  <!-- Version: 2026-02-03-02:36 - 持仓显示增强调试版 -->
   <style>
     * {
       margin: 0;
@@ -412,8 +412,9 @@
         try {
           const positionsRes = await fetch('/api/positions-with-avg');
           positionsData = await positionsRes.json();
+          console.log('🔍 持仓API返回:', positionsData);
         } catch (error) {
-          console.error('Failed to get positions:', error);
+          console.error('❌ 获取持仓失败:', error);
         }
         
         // 获取交易历史和统计 - 独立错误处理
@@ -442,10 +443,31 @@
         }
         
         // 更新持仓（使用均价数据）
-        if (positionsData.success && positionsData.positions) {
+        console.log('🔍 准备更新持仓, success:', positionsData.success, 'positions count:', positionsData.positions?.length);
+        
+        if (positionsData.success && positionsData.positions && positionsData.positions.length > 0) {
+          console.log('✅ 使用API持仓数据更新');
           updatePositionsWithAvg(positionsData.positions);
         } else {
-          updatePositions(historyData.trades || []);
+          console.log('⚠️ 持仓数据为空或API失败，尝试备用方案');
+          
+          // 备用方案：尝试直接获取positions
+          try {
+            const backupRes = await fetch('/api/positions');
+            const backupData = await backupRes.json();
+            console.log('🔍 备用API返回:', backupData);
+            
+            if (backupData.success && backupData.positions && backupData.positions.length > 0) {
+              console.log('✅ 使用备用API更新持仓');
+              updatePositionsWithAvg(backupData.positions);
+            } else {
+              console.log('📭 无持仓数据，显示空状态');
+              updatePositions(historyData.trades || []);
+            }
+          } catch (error) {
+            console.error('❌ 备用API也失败:', error);
+            updatePositions(historyData.trades || []);
+          }
         }
         
         // 更新历史（显示fills）
@@ -469,12 +491,15 @@
       console.log('🔍 updatePositionsWithAvg called with:', positions);
       const container = document.getElementById('positions-container');
       
-      document.getElementById('active-positions').textContent = positions.length;
-      
-      if (positions.length === 0) {
+      if (!positions || positions.length === 0) {
+        console.log('⚠️ positions为空或undefined');
         container.innerHTML = '<div class="no-data">暂无持仓</div>';
+        document.getElementById('active-positions').textContent = '0';
         return;
       }
+      
+      console.log('✅ 开始渲染', positions.length, '个持仓');
+      document.getElementById('active-positions').textContent = positions.length;
       
       let html = '';
       
@@ -505,15 +530,15 @@
             <div class="position-details">
               <div class="detail-item">
                 <div>数量</div>
-                <div class="detail-value">${pos.size.toFixed(4)}</div>
+                <div class="detail-value">${(pos.size || 0).toFixed(4)}</div>
               </div>
               <div class="detail-item">
                 <div>开仓均价</div>
-                <div class="detail-value">$${(pos.avgEntryPrice || pos.entryPrice || pos.currentPrice).toFixed(4)}</div>
+                <div class="detail-value">$${(pos.avgEntryPrice || pos.entryPrice || pos.currentPrice || 0).toFixed(4)}</div>
               </div>
               <div class="detail-item">
                 <div>当前价格</div>
-                <div class="detail-value">$${pos.currentPrice.toFixed(4)}</div>
+                <div class="detail-value">$${(pos.currentPrice || 0).toFixed(4)}</div>
               </div>
               <div class="detail-item">
                 <div>P&L</div>
