@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🚀 $160→$5000 挑战</title>
+  <!-- Version: 2026-02-03-02:00 - 区块显示修复版 -->
   <style>
     * {
       margin: 0;
@@ -656,18 +657,28 @@
     }
 
     function updateBlockInfo(state) {
+      console.log('🔍 updateBlockInfo called:', state);
       const blockElement = document.getElementById('current-block');
-      if (!blockElement) return;
+      console.log('🔍 blockElement:', blockElement);
+      
+      if (!blockElement) {
+        console.error('❌ current-block元素不存在！');
+        return;
+      }
       
       const height = state.last_processed_height || state.lastProcessedHeight || 0;
       const blocksProcessed = state.total_blocks_processed || state.totalBlocksProcessed || 0;
       const fillsFound = state.total_fills_found || state.totalFillsFound || 0;
       
+      console.log('🔍 区块数据:', { height, blocksProcessed, fillsFound });
+      
       if (height > 0) {
         blockElement.textContent = height.toLocaleString();
         blockElement.title = `已处理: ${blocksProcessed.toLocaleString()} 区块, 找到: ${fillsFound} 订单`;
+        console.log('✅ 区块显示已更新:', height.toLocaleString());
       } else {
         blockElement.textContent = '未启动';
+        console.log('⚠️  区块高度为0');
       }
     }
 

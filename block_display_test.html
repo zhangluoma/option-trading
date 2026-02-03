@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>区块显示测试</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+    .test-card { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .test-title { font-size: 20px; font-weight: bold; margin-bottom: 15px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+    .stat-card { background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; }
+    .stat-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+    .stat-value { font-size: 24px; font-weight: bold; color: #333; }
+    button { padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+    button:hover { background: #0056b3; }
+    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    .success { color: #28a745; }
+    .error { color: #dc3545; }
+  </style>
+</head>
+<body>
+  <h1>🔍 区块显示测试页面</h1>
+  
+  <div class="test-card">
+    <div class="test-title">1️⃣ 实时区块显示</div>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">🔍 当前区块</div>
+        <div class="stat-value" id="current-block">加载中...</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">📦 已处理区块</div>
+        <div class="stat-value" id="total-blocks">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">🎯 找到订单</div>
+        <div class="stat-value" id="total-fills">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">⏰ 最后更新</div>
+        <div class="stat-value" id="last-update" style="font-size: 14px;">-</div>
+      </div>
+    </div>
+    
+    <button onclick="refresh()">🔄 刷新</button>
+    <button onclick="window.location.href='/'">🏠 返回主页</button>
+  </div>
+  
+  <div class="test-card">
+    <div class="test-title">2️⃣ API原始响应</div>
+    <pre id="api-response">等待刷新...</pre>
+  </div>
+  
+  <div class="test-card">
+    <div class="test-title">3️⃣ 浏览器控制台日志</div>
+    <p>按F12打开开发者工具查看控制台日志</p>
+    <p id="console-check" class="error">检查中...</p>
+  </div>
+  
+  <script>
+    async function refresh() {
+      console.log('🔄 开始刷新...');
+      
+      try {
+        const res = await fetch('/api/scanner-status');
+        const data = await res.json();
+        
+        console.log('📡 API响应:', data);
+        
+        document.getElementById('api-response').textContent = JSON.stringify(data, null, 2);
+        
+        if (data.success && data.state) {
+          const state = data.state;
+          
+          const height = state.last_processed_height || 0;
+          const blocks = state.total_blocks_processed || 0;
+          const fills = state.total_fills_found || 0;
+          const lastScan = state.last_scan_at;
+          
+          console.log('📊 解析数据:', { height, blocks, fills });
+          
+          document.getElementById('current-block').textContent = height.toLocaleString();
+          document.getElementById('total-blocks').textContent = blocks.toLocaleString();
+          document.getElementById('total-fills').textContent = fills;
+          
+          if (lastScan) {
+            const time = new Date(lastScan).toLocaleString('zh-CN', {timeZone: 'America/Los_Angeles'});
+            document.getElementById('last-update').textContent = time;
+          }
+          
+          document.getElementById('console-check').textContent = '✅ 控制台日志正常（按F12查看）';
+          document.getElementById('console-check').className = 'success';
+          
+          console.log('✅ 更新完成');
+        } else {
+          console.error('❌ API返回失败:', data);
+          document.getElementById('console-check').textContent = '❌ API返回失败（查看控制台）';
+        }
+      } catch (error) {
+        console.error('❌ 刷新出错:', error);
+        document.getElementById('api-response').textContent = '错误: ' + error.message;
+        document.getElementById('console-check').textContent = '❌ 请求失败: ' + error.message;
+      }
+    }
+    
+    // 初始加载
+    refresh();
+    
+    // 每5秒自动刷新
+    setInterval(refresh, 5000);
+    
+    console.log('🔍 区块显示测试页面已加载');
+    console.log('💡 提示: 这个页面每5秒自动刷新一次');
+  </script>
+</body>
+</html>
