@@ -11,7 +11,7 @@ const { getLatestHeight, extractOrdersFromBlock, getBlock } = require('./protobu
 const db = require('./database/db');
 
 const ADDRESS = 'dydx1crq0p3qkxtk8v5hrzplu7wgtuwt0am6lnfm4je';
-const POLL_INTERVAL_MS = 5000; // 每5秒检查一次新区块（避免429限流）
+const POLL_INTERVAL_MS = 60000; // 每60秒(1分钟)检查一次新区块（避免429限流）
 
 /**
  * 实时监听主函数
