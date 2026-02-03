@@ -97,38 +97,79 @@ function fetchFillsFromLocal() {
 }
 
 /**
+ * 从实时监听器读取fills（链上数据）
+ */
+function fetchFillsFromRealtimeMonitor() {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    const realtimeFile = path.join(__dirname, 'data', 'realtime_fills.json');
+    
+    if (fs.existsSync(realtimeFile)) {
+      const data = fs.readFileSync(realtimeFile, 'utf8');
+      const fills = JSON.parse(data);
+      
+      // 转换为标准格式
+      return fills.map(f => ({
+        ticker: f.ticker,
+        market: f.market,
+        side: f.side,
+        size: 0, // TODO: 从quantums转换
+        price: 0, // TODO: 从subticks转换
+        createdAt: f.time,
+        type: 'ONCHAIN', // 标记为链上数据
+        height: f.height,
+        clientId: f.clientId
+      }));
+    }
+  } catch (error) {
+    console.error('读取实时监听器数据失败:', error.message);
+  }
+  
+  return [];
+}
+
+/**
  * 获取fills（优先链上，不依赖本地）
  */
 async function getFills(limit = 100) {
-  console.log('📊 获取交易fills（从链上）...\n');
+  console.log('📊 获取交易fills...\n');
   
-  // 优先: 尝试Indexer API（链上数据）
-  console.log('1. 尝试Indexer API（链上）...');
+  // 优先1: 实时监听器捕获的数据（真正的链上！）
+  console.log('1. 检查实时监听器数据（链上）...');
+  const realtimeFills = fetchFillsFromRealtimeMonitor();
+  
+  if (realtimeFills.length > 0) {
+    console.log(`✅ 从实时监听器获取${realtimeFills.length}条记录（链上）\n`);
+    return realtimeFills.slice(-limit);
+  }
+  
+  console.log('   实时监听器数据: 0条（监听器刚启动，等待捕获）\n');
+  
+  // 优先2: 尝试Indexer API（链上数据）
+  console.log('2. 尝试Indexer API（链上）...');
   const indexerFills = await fetchFillsFromIndexer(limit);
   
   if (indexerFills && indexerFills.length > 0) {
-    console.log(`✅ 从Indexer获取${indexerFills.length}条记录\n`);
+    console.log(`✅ 从Indexer获取${indexerFills.length}条记录（链上）\n`);
     return indexerFills;
   }
   
-  // 备选1: 扫描区块（未实现，需要Protobuf解析）
-  console.log('2. Indexer不可用（geoblocked）');
-  console.log('   备选方案: 区块扫描（开发中）\n');
+  console.log('   Indexer不可用（geoblocked）\n');
   
-  // 备选2: 临时使用本地记录（仅作为fallback）
-  console.log('3. 临时使用本地记录作为fallback...');
+  // Fallback: 本地daemon记录（不是链上数据！）
+  console.log('3. Fallback到本地daemon记录（⚠️ 不是链上数据）...');
   const localFills = fetchFillsFromLocal();
   
   if (localFills.length > 0) {
-    console.log(`⚠️  从本地获取${localFills.length}条记录（不推荐）\n`);
-    console.log('   建议: 使用VPN访问Indexer获取真实链上数据\n');
+    console.log(`⚠️  从本地获取${localFills.length}条记录（daemon记录，非链上）\n`);
+    console.log('   说明: 这些是daemon记录的本地数据');
+    console.log('   等待: 实时监听器捕获新订单（真正的链上数据）\n');
     return localFills.slice(-limit);
   }
   
   console.log('❌ 无可用数据源\n');
-  console.log('建议:');
-  console.log('  1. 使用VPN访问Indexer');
-  console.log('  2. 等待区块扫描器完成\n');
   return [];
 }
 
