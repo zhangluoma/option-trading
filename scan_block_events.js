@@ -128,21 +128,42 @@ function parseEventAttributes(event, height) {
 }
 
 /**
- * 扫描区块事件
+ * Sleep函数
  */
-async function scanBlockEvents(fromHeight, toHeight) {
-  console.log(`🔍 扫描区块事件 ${fromHeight} - ${toHeight}...\n`);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 扫描区块事件（带rate limit处理）
+ */
+async function scanBlockEvents(fromHeight, toHeight, delayMs = 200) {
+  console.log(`🔍 扫描区块事件 ${fromHeight} - ${toHeight}...`);
+  console.log(`⏱️  Rate limit保护: ${delayMs}ms延迟\n`);
   
   const allFills = [];
   let scannedBlocks = 0;
   let blocksWithFills = 0;
+  let rateLimitErrors = 0;
   
   for (let height = toHeight; height >= fromHeight && allFills.length < 50; height--) {
     try {
       const blockResults = await getBlockResults(height);
       
-      if (!blockResults) continue;
+      if (!blockResults) {
+        rateLimitErrors++;
+        
+        if (rateLimitErrors > 3) {
+          console.log(`\n⚠️  连续${rateLimitErrors}次失败，增加延迟到${delayMs * 2}ms`);
+          delayMs *= 2;
+          rateLimitErrors = 0;
+        }
+        
+        await sleep(delayMs * 2);
+        continue;
+      }
       
+      rateLimitErrors = 0; // 重置错误计数
       scannedBlocks++;
       
       const fills = extractFillsFromEvents(blockResults, height);
@@ -157,11 +178,16 @@ async function scanBlockEvents(fromHeight, toHeight) {
         });
       }
       
-      if (height % 100 === 0) {
+      if (height % 10 === 0) {
         process.stdout.write(`  已扫描: ${scannedBlocks} 区块, ${allFills.length} fills...\r`);
       }
+      
+      // Rate limit保护：每次请求后延迟
+      await sleep(delayMs);
+      
     } catch (e) {
       // 跳过错误的区块
+      await sleep(delayMs);
     }
   }
   
@@ -204,11 +230,12 @@ async function main() {
   
   console.log(`最新区块: ${latestHeight}\n`);
   
-  // 扫描最近1000个区块
-  const scanRange = 1000;
+  // 扫描最近5000个区块（约8-10小时）
+  // 用200ms延迟避免rate limit
+  const scanRange = 5000;
   const fromHeight = Math.max(1, latestHeight - scanRange);
   
-  const fills = await scanBlockEvents(fromHeight, latestHeight);
+  const fills = await scanBlockEvents(fromHeight, latestHeight, 200);
   
   if (fills.length > 0) {
     console.log('找到的Fills:\n');
