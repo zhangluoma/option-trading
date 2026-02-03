@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>测试区块显示</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    .stat-card { border: 1px solid #ccc; padding: 15px; margin: 10px 0; }
+    .stat-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+    .stat-value { font-size: 24px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🔍 区块扫描器状态测试</h1>
+  
+  <div class="stat-card">
+    <div class="stat-label">当前区块</div>
+    <div class="stat-value" id="current-block">加载中...</div>
+  </div>
+  
+  <div class="stat-card">
+    <div class="stat-label">已处理区块</div>
+    <div class="stat-value" id="total-blocks">0</div>
+  </div>
+  
+  <div class="stat-card">
+    <div class="stat-label">找到订单</div>
+    <div class="stat-value" id="total-fills">0</div>
+  </div>
+  
+  <div class="stat-card">
+    <div class="stat-label">最后更新</div>
+    <div class="stat-value" id="last-update" style="font-size: 14px;">-</div>
+  </div>
+  
+  <button onclick="refresh()" style="padding: 10px 20px; font-size: 16px; margin-top: 20px;">
+    🔄 刷新
+  </button>
+  
+  <pre id="raw-data" style="background: #f5f5f5; padding: 10px; margin-top: 20px; font-size: 12px;"></pre>
+  
+  <script>
+    async function refresh() {
+      try {
+        const res = await fetch('/api/scanner-status');
+        const data = await res.json();
+        
+        document.getElementById('raw-data').textContent = JSON.stringify(data, null, 2);
+        
+        if (data.success && data.state) {
+          const state = data.state;
+          
+          document.getElementById('current-block').textContent = 
+            (state.last_processed_height || 0).toLocaleString();
+          
+          document.getElementById('total-blocks').textContent = 
+            (state.total_blocks_processed || 0).toLocaleString();
+          
+          document.getElementById('total-fills').textContent = 
+            state.total_fills_found || 0;
+          
+          document.getElementById('last-update').textContent = 
+            state.last_scan_at ? new Date(state.last_scan_at).toLocaleString('zh-CN') : '-';
+        }
+      } catch (error) {
+        console.error('刷新失败:', error);
+        alert('刷新失败: ' + error.message);
+      }
+    }
+    
+    // 初始加载
+    refresh();
+    
+    // 每5秒自动刷新
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

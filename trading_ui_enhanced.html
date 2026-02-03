@@ -323,6 +323,10 @@
         <div class="stat-label">活跃持仓</div>
         <div class="stat-value neutral" id="active-positions">0</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">🔍 当前区块</div>
+        <div class="stat-value neutral" id="current-block" style="font-size: 14px;">...</div>
+      </div>
     </div>
 
     <!-- Net Worth图表 -->
@@ -402,6 +406,14 @@
         // 获取fills历史
         const fillsRes = await fetch('/api/fills?limit=25');
         const fillsData = await fillsRes.json();
+        
+        // 获取扫描器状态（区块信息）
+        const scannerRes = await fetch('/api/scanner-status');
+        const scannerData = await scannerRes.json();
+        
+        if (scannerData.success && scannerData.state) {
+          updateBlockInfo(scannerData.state);
+        }
         
         if (historyData.success) {
           // ✅ 保存API返回的真实equity（链上数据）
@@ -641,6 +653,22 @@
       
       html += '</tbody></table>';
       container.innerHTML = html;
+    }
+
+    function updateBlockInfo(state) {
+      const blockElement = document.getElementById('current-block');
+      if (!blockElement) return;
+      
+      const height = state.last_processed_height || state.lastProcessedHeight || 0;
+      const blocksProcessed = state.total_blocks_processed || state.totalBlocksProcessed || 0;
+      const fillsFound = state.total_fills_found || state.totalFillsFound || 0;
+      
+      if (height > 0) {
+        blockElement.textContent = height.toLocaleString();
+        blockElement.title = `已处理: ${blocksProcessed.toLocaleString()} 区块, 找到: ${fillsFound} 订单`;
+      } else {
+        blockElement.textContent = '未启动';
+      }
     }
 
     function updateStats(trades) {
