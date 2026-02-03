@@ -26,8 +26,8 @@ db.initDatabase().then(ready => {
   }
 });
 
-// 静态文件
-app.use(express.static(path.join(__dirname, 'public')));
+// 静态文件 - 根目录
+app.use(express.static(__dirname));
 app.use(express.json());
 
 /**
@@ -192,7 +192,7 @@ app.get('/api/scanner-status', async (req, res) => {
  * 主页
  */
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'trading_ui_enhanced.html'));
+  res.sendFile(path.join(__dirname, 'trading_ui_enhanced.html'));
 });
 
 /**
