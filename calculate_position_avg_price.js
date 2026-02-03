@@ -32,8 +32,8 @@ function calculateAvgEntryPrice(fills, ticker, currentSize) {
     return null;
   }
   
-  // 模拟持仓变化 - 使用FIFO法
-  let position = 0; // 当前持仓量
+  // 模拟持仓变化 - 正确处理所有情况
+  let position = 0; // 当前持仓量（正=LONG，负=SHORT）
   let avgPrice = 0;  // 当前持仓均价
   
   for (const fill of tickerFills) {
@@ -41,38 +41,42 @@ function calculateAvgEntryPrice(fills, ticker, currentSize) {
     const fillPrice = fill.price;
     const side = fill.side;
     
+    // 将fill转换为持仓变化（正=BUY，负=SELL）
+    const positionChange = side === 'BUY' ? fillSize : -fillSize;
+    const newPosition = position + positionChange;
+    
     if (position === 0) {
-      // 从零开仓
-      position = side === 'BUY' ? fillSize : -fillSize;
-      avgPrice = fillPrice;
-    } else if (
-      (position > 0 && side === 'BUY') || 
-      (position < 0 && side === 'SELL')
-    ) {
-      // 同向加仓 - 加权平均
-      const oldCost = Math.abs(position) * avgPrice;
-      const newCost = fillSize * fillPrice;
-      const newPosition = position + (side === 'BUY' ? fillSize : -fillSize);
-      avgPrice = (oldCost + newCost) / Math.abs(newPosition);
+      // Case 1: 从零开仓
       position = newPosition;
-    } else {
-      // 反向减仓或反转
-      const reduceSize = fillSize;
+      avgPrice = fillPrice;
       
-      if (Math.abs(position) > reduceSize) {
-        // 部分平仓 - 均价不变
-        position = position + (side === 'BUY' ? reduceSize : -reduceSize);
-        // avgPrice保持不变
-      } else if (Math.abs(position) === reduceSize) {
-        // 完全平仓
-        position = 0;
-        avgPrice = 0;
-      } else {
-        // 完全平仓后反向开仓
-        const remainingSize = reduceSize - Math.abs(position);
-        position = side === 'BUY' ? remainingSize : -remainingSize;
-        avgPrice = fillPrice;
-      }
+    } else if (newPosition === 0) {
+      // Case 2: 完全平仓到零
+      position = 0;
+      avgPrice = 0;
+      
+    } else if (Math.sign(position) !== Math.sign(newPosition)) {
+      // Case 3: 持仓反转（跨越零点）
+      // 例如: position=+10, change=-12 → newPosition=-2
+      // 或: position=-5, change=+8 → newPosition=+3
+      position = newPosition;
+      avgPrice = fillPrice; // 反转后的新持仓，成本基础是本次fill价格
+      
+    } else if (Math.abs(newPosition) > Math.abs(position)) {
+      // Case 4: 加仓（同向且绝对值增大）
+      // 例如: position=+5, change=+3 → newPosition=+8
+      // 或: position=-5, change=-3 → newPosition=-8
+      const oldCost = Math.abs(position) * avgPrice;
+      const addedCost = Math.abs(positionChange) * fillPrice;
+      avgPrice = (oldCost + addedCost) / Math.abs(newPosition);
+      position = newPosition;
+      
+    } else {
+      // Case 5: 减仓（同向但绝对值减小）
+      // 例如: position=+10, change=-3 → newPosition=+7
+      // 或: position=-10, change=+3 → newPosition=-7
+      // 均价不变
+      position = newPosition;
     }
   }
   
