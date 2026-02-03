@@ -26,9 +26,26 @@ db.initDatabase().then(ready => {
   }
 });
 
-// 静态文件 - 根目录
-app.use(express.static(__dirname));
 app.use(express.json());
+
+/**
+ * 主页 - 必须在静态文件之前定义
+ */
+app.get('/', (req, res) => {
+  const fs = require('fs');
+  const filePath = path.join(__dirname, 'trading_ui_enhanced.html');
+  
+  try {
+    const html = fs.readFileSync(filePath, 'utf8');
+    res.type('html').send(html);
+  } catch (error) {
+    console.error('读取HTML失败:', error.message);
+    res.status(500).send('Error loading page');
+  }
+});
+
+// 静态文件 - 根目录（路由之后）
+app.use(express.static(__dirname));
 
 /**
  * API: 获取账户余额
@@ -225,13 +242,6 @@ app.get('/api/networth-history', async (req, res) => {
     console.error('Failed to get networth history:', error);
     res.json({ success: false, error: error.message, history: [] });
   }
-});
-
-/**
- * 主页
- */
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'trading_ui_enhanced.html'));
 });
 
 /**
