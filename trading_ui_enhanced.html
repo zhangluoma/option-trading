@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🚀 $160→$5000 挑战</title>
-  <!-- Version: 2026-02-03-02:22 - 持仓显示最终修复版 -->
+  <!-- Version: 2026-02-03-02:26 - 统计数据修复版 -->
   <style>
     * {
       margin: 0;
@@ -455,10 +455,8 @@
           updateHistory(historyData.trades || []);
         }
         
-        // 更新统计
-        if (historyData.success) {
-          updateStats(historyData.trades || []);
-        }
+        // 更新统计 - 使用填充的数据和净值
+        updateStats(historyData.trades || [], fillsData.fills || [], positionsData.positions || []);
         
       } catch (error) {
         console.error('Refresh failed:', error);
@@ -707,37 +705,49 @@
       }
     }
 
-    function updateStats(trades) {
+    function updateStats(trades, fills, positions) {
+      console.log('🔍 updateStats called:', {trades: trades.length, fills: fills.length, positions: positions.length});
+      
+      // 从networth API获取最新净值
+      fetch('/api/networth-history?hours=1')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.history && data.history.length > 0) {
+            const latest = data.history[data.history.length - 1];
+            const currentEquity = parseFloat(latest.netWorth);
+            
+            // 起始资金
+            const initialEquity = 160.0;
+            const trueTotalPnl = currentEquity - initialEquity;
+            
+            // 更新净值显示
+            document.getElementById('current-equity').textContent = `$${currentEquity.toFixed(2)}`;
+            document.getElementById('total-pnl').textContent = `${trueTotalPnl >= 0 ? '+' : ''}$${trueTotalPnl.toFixed(2)}`;
+            
+            console.log('✅ 净值更新:', currentEquity, '总盈亏:', trueTotalPnl);
+          }
+        })
+        .catch(err => console.error('Failed to get networth:', err));
+      
+      // 交易统计（基于trades历史）
       const closedTrades = trades.filter(t => t.status === 'CLOSED');
-      const openTrades = trades.filter(t => t.status === 'OPEN');
-      
-      // 已实现盈亏（已平仓）
-      const realizedPnl = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-      
-      // 未实现盈亏（活跃持仓）
-      const unrealizedPnl = openTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
-      
-      // 总盈亏 = 已实现 + 未实现
-      const totalPnl = realizedPnl + unrealizedPnl;
-      
-      const winningTrades = closedTrades.filter(t => t.pnl > 0).length;
       const totalTrades = closedTrades.length;
-      const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100).toFixed(1) : 0;
       
-      // ✅ 使用API返回的真实equity（链上数据）
-      const currentEquity = window.realEquity || 161.13;
-      const progressPercent = (currentEquity / 5000 * 100).toFixed(1);
-      
-      // ✅ 真正的总盈亏 = 当前净值 - 起始资金
-      const initialEquity = 160.0; // 起始资金（实际值）
-      const trueTotalPnl = currentEquity - initialEquity;
-      
-      // 更新显示
-      document.getElementById('current-equity').textContent = `$${currentEquity.toFixed(2)}`;
-      // 显示真实总盈亏（包含未实现）
-      document.getElementById('total-pnl').textContent = `${trueTotalPnl >= 0 ? '+' : ''}$${trueTotalPnl.toFixed(2)}`;
-      document.getElementById('total-trades').textContent = totalTrades;
-      document.getElementById('win-rate').textContent = `${winRate}%`;
+      if (totalTrades > 0) {
+        const winningTrades = closedTrades.filter(t => t.pnl > 0).length;
+        const winRate = (winningTrades / totalTrades * 100).toFixed(1);
+        
+        document.getElementById('total-trades').textContent = totalTrades;
+        document.getElementById('win-rate').textContent = `${winRate}%`;
+      } else if (fills.length > 0) {
+        // 如果没有trades但有fills，显示fills数量
+        document.getElementById('total-trades').textContent = `${fills.length} fills`;
+        document.getElementById('win-rate').textContent = '-';
+      } else {
+        // 完全没有历史数据
+        document.getElementById('total-trades').textContent = '0';
+        document.getElementById('win-rate').textContent = '0%';
+      }
       
       // 更新进度条
       const progressBar = document.getElementById('progress-bar');
