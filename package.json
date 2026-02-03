@@ -11,6 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@cosmjs/proto-signing": "^0.38.1",
+    "@cosmjs/stargate": "^0.38.1",
     "@dydxprotocol/v4-client-js": "^3.4.0",
     "bip39": "^3.1.0",
     "dotenv": "^17.2.3",
