@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Fills Display</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .fill-item { 
+            background: #f0f0f0; 
+            padding: 10px; 
+            margin: 5px 0;
+            border-left: 3px solid #4CAF50;
+        }
+        .badge { 
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .badge-long { background: #10b981; color: white; }
+        .badge-short { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+    <h2>📊 Fills测试 - API数据显示</h2>
+    <div id="fills-container">加载中...</div>
+    
+    <script>
+        async function loadFills() {
+            try {
+                const res = await fetch('/api/fills?limit=25');
+                const data = await res.json();
+                
+                console.log('Fills数据:', data);
+                
+                const container = document.getElementById('fills-container');
+                
+                if (!data.success || data.fills.length === 0) {
+                    container.innerHTML = '<p style="color: orange;">⚠️  暂无fills数据</p>';
+                    return;
+                }
+                
+                let html = '<h3>✅ 找到 ' + data.fills.length + ' 条fills</h3>';
+                
+                data.fills.forEach((fill, i) => {
+                    const sideBadge = fill.side === 'BUY' 
+                        ? '<span class="badge badge-long">买</span>'
+                        : '<span class="badge badge-short">卖</span>';
+                    
+                    const time = new Date(fill.createdAt).toLocaleString('zh-CN');
+                    
+                    html += `
+                        <div class="fill-item">
+                            <strong>${i + 1}. ${fill.ticker}</strong> ${sideBadge}
+                            &nbsp; 数量: ${fill.size}
+                            &nbsp; 价格: $${fill.price}
+                            <br>
+                            <small style="color: #666;">时间: ${time}</small>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+                
+            } catch (error) {
+                console.error('加载失败:', error);
+                document.getElementById('fills-container').innerHTML = 
+                    '<p style="color: red;">❌ 加载失败: ' + error.message + '</p>';
+            }
+        }
+        
+        loadFills();
+    </script>
+</body>
+</html>
