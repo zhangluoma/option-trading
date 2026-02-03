@@ -391,19 +391,42 @@
       try {
         isLoading = true;
         
+        // 获取持仓（包含均价）
+        const positionsRes = await fetch('/api/positions-with-avg');
+        const positionsData = await positionsRes.json();
+        
         // 获取交易历史和统计
         const historyRes = await fetch('/api/trade-history');
         const historyData = await historyRes.json();
+        
+        // 获取fills历史
+        const fillsRes = await fetch('/api/fills?limit=25');
+        const fillsData = await fillsRes.json();
         
         if (historyData.success) {
           // ✅ 保存API返回的真实equity（链上数据）
           window.realEquity = historyData.equity || 161.13;
           window.usedMargin = historyData.usedMargin || 0;
           window.availableMargin = historyData.availableMargin || 0;
-          
-          updatePositions(historyData.trades);
-          updateHistory(historyData.trades);
-          updateStats(historyData.trades);
+        }
+        
+        // 更新持仓（使用均价数据）
+        if (positionsData.success && positionsData.positions) {
+          updatePositionsWithAvg(positionsData.positions);
+        } else {
+          updatePositions(historyData.trades || []);
+        }
+        
+        // 更新历史（显示fills）
+        if (fillsData.success && fillsData.fills) {
+          updateHistoryWithFills(fillsData.fills);
+        } else {
+          updateHistory(historyData.trades || []);
+        }
+        
+        // 更新统计
+        if (historyData.success) {
+          updateStats(historyData.trades || []);
         }
         
       } catch (error) {
@@ -411,6 +434,105 @@
       } finally {
         isLoading = false;
       }
+    }
+
+    function updatePositionsWithAvg(positions) {
+      const container = document.getElementById('positions-container');
+      
+      document.getElementById('active-positions').textContent = positions.length;
+      
+      if (positions.length === 0) {
+        container.innerHTML = '<div class="no-data">暂无持仓</div>';
+        return;
+      }
+      
+      let html = '';
+      
+      positions.forEach(pos => {
+        const sideBadge = pos.side === 'LONG' 
+          ? '<span class="badge badge-long">做多</span>'
+          : '<span class="badge badge-short">做空</span>';
+        
+        const pnl = pos.pnl || 0;
+        const pnlPercent = pos.pnlPercent || 0;
+        const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
+        
+        html += `
+          <div class="position-card">
+            <div class="position-header">
+              <div>
+                <span class="position-ticker">${pos.ticker}</span>
+                ${sideBadge}
+              </div>
+              ${pos.warning ? '<div style="font-size: 11px; color: #f59e0b;">⚠️ 无历史</div>' : ''}
+            </div>
+            <div class="position-details">
+              <div class="detail-item">
+                <div>数量</div>
+                <div class="detail-value">${pos.size.toFixed(4)}</div>
+              </div>
+              <div class="detail-item">
+                <div>开仓均价</div>
+                <div class="detail-value">$${pos.avgEntryPrice.toFixed(4)}</div>
+              </div>
+              <div class="detail-item">
+                <div>当前价格</div>
+                <div class="detail-value">$${pos.currentPrice.toFixed(4)}</div>
+              </div>
+              <div class="detail-item">
+                <div>P&L</div>
+                <div class="detail-value" style="color: ${pnlColor};">
+                  ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)
+                </div>
+              </div>
+              ${pos.fillCount > 0 ? `<div class="detail-item" style="grid-column: span 2; font-size: 11px; color: #9ca3af;">
+                基于 ${pos.fillCount} 笔fills
+              </div>` : ''}
+            </div>
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    }
+    
+    function updateHistoryWithFills(fills) {
+      const container = document.getElementById('history-container');
+      
+      if (fills.length === 0) {
+        container.innerHTML = '<div class="no-data">暂无交易记录</div>';
+        return;
+      }
+      
+      let html = '<table class="trade-table"><thead><tr>';
+      html += '<th>时间</th><th>币种</th><th>方向</th><th>数量</th><th>价格</th>';
+      html += '</tr></thead><tbody>';
+      
+      fills.forEach(fill => {
+        const time = new Date(fill.createdAt).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        
+        const sideBadge = fill.side === 'BUY' 
+          ? '<span class="badge badge-long">买</span>'
+          : '<span class="badge badge-short">卖</span>';
+        
+        const ticker = fill.ticker || (fill.market ? fill.market.replace('-USD', '') : '');
+        
+        html += '<tr>';
+        html += `<td style="font-size: 11px;">${time}</td>`;
+        html += `<td><strong>${ticker}</strong></td>`;
+        html += `<td>${sideBadge}</td>`;
+        html += `<td>${parseFloat(fill.size).toFixed(4)}</td>`;
+        html += `<td>$${parseFloat(fill.price).toFixed(2)}</td>`;
+        html += '</tr>';
+      });
+      
+      html += '</tbody></table>';
+      container.innerHTML = html;
     }
 
     function updatePositions(trades) {
