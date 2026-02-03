@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>持仓测试</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    .position { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px 0; }
+    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>📊 持仓数据测试</h1>
+  
+  <button onclick="testAPI()">🔄 测试API</button>
+  <button onclick="window.location.href='/'">🏠 返回主页</button>
+  
+  <h2>1️⃣ API原始响应</h2>
+  <pre id="api-raw">点击测试按钮...</pre>
+  
+  <h2>2️⃣ 解析后的持仓</h2>
+  <div id="positions-display"></div>
+  
+  <script>
+    async function testAPI() {
+      console.log('🔍 开始测试...');
+      
+      try {
+        // 测试 /api/positions
+        console.log('📡 测试 /api/positions');
+        const res1 = await fetch('/api/positions');
+        const data1 = await res1.json();
+        console.log('✅ /api/positions:', data1);
+        
+        // 测试 /api/positions-with-avg
+        console.log('📡 测试 /api/positions-with-avg');
+        const res2 = await fetch('/api/positions-with-avg');
+        const data2 = await res2.json();
+        console.log('✅ /api/positions-with-avg:', data2);
+        
+        document.getElementById('api-raw').textContent = JSON.stringify(data2, null, 2);
+        
+        if (data2.success && data2.positions && data2.positions.length > 0) {
+          let html = '<h3>找到 ' + data2.positions.length + ' 个持仓</h3>';
+          
+          data2.positions.forEach(pos => {
+            html += `
+              <div class="position">
+                <strong>${pos.ticker} ${pos.side}</strong><br>
+                数量: ${pos.size}<br>
+                当前价: $${pos.currentPrice}<br>
+                价值: $${pos.value.toFixed(2)}<br>
+                均价: ${pos.avgEntryPrice ? '$' + pos.avgEntryPrice : '无数据'}<br>
+                Fills: ${pos.fillCount}
+              </div>
+            `;
+          });
+          
+          document.getElementById('positions-display').innerHTML = html;
+          console.log('✅ 显示完成');
+        } else {
+          document.getElementById('positions-display').innerHTML = '<p>❌ 无持仓数据</p>';
+          console.error('❌ API返回失败或无数据');
+        }
+      } catch (error) {
+        console.error('❌ 测试失败:', error);
+        document.getElementById('api-raw').textContent = '错误: ' + error.message;
+        document.getElementById('positions-display').innerHTML = '<p>❌ 错误: ' + error.message + '</p>';
+      }
+    }
+    
+    // 自动运行
+    testAPI();
+  </script>
+</body>
+</html>
