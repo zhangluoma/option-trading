@@ -392,9 +392,20 @@
 
     async function refreshAll() {
       if (isLoading) return;
+      isLoading = true;
       
       try {
-        isLoading = true;
+        // 🔍 优先获取扫描器状态（不依赖dYdX API，只查MySQL）
+        try {
+          const scannerRes = await fetch('/api/scanner-status');
+          const scannerData = await scannerRes.json();
+          
+          if (scannerData.success && scannerData.state) {
+            updateBlockInfo(scannerData.state);
+          }
+        } catch (error) {
+          console.error('Failed to get scanner status:', error);
+        }
         
         // 获取持仓（包含均价）
         const positionsRes = await fetch('/api/positions-with-avg');
@@ -407,14 +418,6 @@
         // 获取fills历史
         const fillsRes = await fetch('/api/fills?limit=25');
         const fillsData = await fillsRes.json();
-        
-        // 获取扫描器状态（区块信息）
-        const scannerRes = await fetch('/api/scanner-status');
-        const scannerData = await scannerRes.json();
-        
-        if (scannerData.success && scannerData.state) {
-          updateBlockInfo(scannerData.state);
-        }
         
         if (historyData.success) {
           // ✅ 保存API返回的真实equity（链上数据）
