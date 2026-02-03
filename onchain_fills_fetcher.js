@@ -97,13 +97,13 @@ function fetchFillsFromLocal() {
 }
 
 /**
- * 获取fills（智能选择数据源）
+ * 获取fills（优先链上，不依赖本地）
  */
 async function getFills(limit = 100) {
-  console.log('📊 获取交易fills...\n');
+  console.log('📊 获取交易fills（从链上）...\n');
   
-  // 尝试Indexer
-  console.log('1. 尝试Indexer API...');
+  // 优先: 尝试Indexer API（链上数据）
+  console.log('1. 尝试Indexer API（链上）...');
   const indexerFills = await fetchFillsFromIndexer(limit);
   
   if (indexerFills && indexerFills.length > 0) {
@@ -111,16 +111,24 @@ async function getFills(limit = 100) {
     return indexerFills;
   }
   
-  // 使用本地记录
-  console.log('2. 使用本地记录...');
+  // 备选1: 扫描区块（未实现，需要Protobuf解析）
+  console.log('2. Indexer不可用（geoblocked）');
+  console.log('   备选方案: 区块扫描（开发中）\n');
+  
+  // 备选2: 临时使用本地记录（仅作为fallback）
+  console.log('3. 临时使用本地记录作为fallback...');
   const localFills = fetchFillsFromLocal();
   
   if (localFills.length > 0) {
-    console.log(`✅ 从本地获取${localFills.length}条记录\n`);
+    console.log(`⚠️  从本地获取${localFills.length}条记录（不推荐）\n`);
+    console.log('   建议: 使用VPN访问Indexer获取真实链上数据\n');
     return localFills.slice(-limit);
   }
   
   console.log('❌ 无可用数据源\n');
+  console.log('建议:');
+  console.log('  1. 使用VPN访问Indexer');
+  console.log('  2. 等待区块扫描器完成\n');
   return [];
 }
 
