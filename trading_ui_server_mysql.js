@@ -10,7 +10,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const db = require('./database/db');
-const dydx = require('./dydx_data');
+const dydx = require('./dydx_data_cached'); // 使用带缓存版本
 
 const app = express();
 const PORT = process.env.UI_PORT || 3456;

@@ -231,13 +231,44 @@ async function getFullAccountStatus() {
 }
 
 // 导出
+/**
+ * 获取余额（便捷函数）
+ */
+async function getBalance() {
+  const status = await getFullAccountStatus();
+  return {
+    equity: status.equity,
+    usdcBalance: status.usdcBalance,
+    usedMargin: status.usedMargin,
+    availableMargin: status.availableMargin
+  };
+}
+
+/**
+ * 获取持仓列表（便捷函数）
+ */
+async function getPositions() {
+  const status = await getFullAccountStatus();
+  return status.positions.map(pos => ({
+    market: `${pos.ticker}-USD`,
+    ticker: pos.ticker,
+    side: pos.side,
+    size: pos.size,
+    currentPrice: pos.currentPrice,
+    value: pos.value,
+    entryPrice: pos.entryPrice || pos.currentPrice
+  }));
+}
+
 module.exports = {
   getClient,
   getPrice,
   getAllPrices,
   getAccountInfo,
   getFullAccountStatus,
-  getMarketConfigs
+  getMarketConfigs,
+  getBalance,
+  getPositions
 };
 
 // CLI测试
