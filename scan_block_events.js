@@ -3,11 +3,13 @@
 /**
  * 从区块事件日志提取fills
  * 完全去中心化，不需要Protobuf解析
+ * 带持久化层，支持断点续传
  */
 
 require('dotenv').config();
 
 const axios = require('axios');
+const { getPersist } = require('./blockchain_persist');
 
 const ADDRESS = 'dydx1crq0p3qkxtk8v5hrzplu7wgtuwt0am6lnfm4je';
 const VALIDATOR_REST = 'https://dydx-ops-rest.kingnodes.com';
@@ -135,18 +137,23 @@ function sleep(ms) {
 }
 
 /**
- * 扫描区块事件（带rate limit处理）
+ * 扫描区块事件（带rate limit处理和持久化）
  */
 async function scanBlockEvents(fromHeight, toHeight, delayMs = 200) {
   console.log(`🔍 扫描区块事件 ${fromHeight} - ${toHeight}...`);
   console.log(`⏱️  Rate limit保护: ${delayMs}ms延迟\n`);
   
+  const persist = getPersist();
   const allFills = [];
   let scannedBlocks = 0;
   let blocksWithFills = 0;
   let rateLimitErrors = 0;
   
-  for (let height = toHeight; height >= fromHeight && allFills.length < 50; height--) {
+  for (let height = toHeight; height >= fromHeight && allFills.length < 100; height--) {
+    // 跳过已处理的区块
+    if (persist.isBlockProcessed(height)) {
+      continue;
+    }
     try {
       const blockResults = await getBlockResults(height);
       
@@ -172,10 +179,21 @@ async function scanBlockEvents(fromHeight, toHeight, delayMs = 200) {
         blocksWithFills++;
         allFills.push(...fills);
         
+        // 保存到persist layer
+        persist.addFills(fills);
+        
         console.log(`✅ 区块 ${height}: 找到 ${fills.length} 个fills`);
         fills.forEach(f => {
           console.log(`   ${f.type} - ${f.market || 'N/A'}`);
         });
+      }
+      
+      // 标记区块已处理
+      persist.markBlockProcessed(height, fills.length);
+      
+      // 每100个区块保存一次
+      if (scannedBlocks % 100 === 0) {
+        persist.save();
       }
       
       if (height % 10 === 0) {
@@ -196,6 +214,16 @@ async function scanBlockEvents(fromHeight, toHeight, delayMs = 200) {
   console.log(`  有fills的区块: ${blocksWithFills}`);
   console.log(`  找到fills: ${allFills.length}\n`);
   
+  // 最终保存persist状态
+  persist.save();
+  
+  console.log('💾 已保存到持久化层\n');
+  console.log('📊 最终统计:');
+  const finalStats = persist.getStats();
+  console.log(`  总处理: ${finalStats.totalBlocksProcessed} 区块`);
+  console.log(`  总找到: ${finalStats.totalFillsFound} fills`);
+  console.log(`  缓存: ${finalStats.cachedFills} fills\n`);
+  
   return allFills;
 }
 
@@ -213,13 +241,23 @@ async function getLatestHeight() {
 }
 
 /**
- * 主函数
+ * 主函数（带持久化）
  */
 async function main() {
   console.log('='.repeat(60));
   console.log('从区块事件日志提取Fills - 完全去中心化');
   console.log('='.repeat(60));
   console.log(`账户: ${ADDRESS}\n`);
+  
+  // 加载持久化状态
+  const persist = getPersist();
+  const stats = persist.getStats();
+  
+  console.log('📊 当前进度:');
+  console.log(`  已处理到区块: ${stats.lastProcessedHeight}`);
+  console.log(`  总共处理: ${stats.totalBlocksProcessed} 区块`);
+  console.log(`  找到fills: ${stats.totalFillsFound} 条`);
+  console.log(`  缓存fills: ${stats.cachedFills} 条\n`);
   
   const latestHeight = await getLatestHeight();
   
@@ -230,15 +268,16 @@ async function main() {
   
   console.log(`最新区块: ${latestHeight}\n`);
   
-  // 扫描最近5000个区块（约8-10小时）
-  // 用200ms延迟避免rate limit
-  const scanRange = 5000;
-  const fromHeight = Math.max(1, latestHeight - scanRange);
+  // 使用persist layer确定扫描范围
+  const { fromHeight, toHeight } = persist.getScanRange(latestHeight, 5000);
   
-  const fills = await scanBlockEvents(fromHeight, latestHeight, 200);
+  console.log(`📍 扫描范围: ${fromHeight} → ${toHeight} (${toHeight - fromHeight + 1} 区块)\n`);
   
+  const fills = await scanBlockEvents(fromHeight, toHeight, 200);
+  
+  // 显示找到的fills（从本次扫描）
   if (fills.length > 0) {
-    console.log('找到的Fills:\n');
+    console.log('本次扫描找到的Fills:\n');
     
     fills.slice(0, 20).forEach((fill, i) => {
       console.log(`${i + 1}. ${fill.type}`);
@@ -248,20 +287,35 @@ async function main() {
       console.log(`   Size: ${fill.size || 'N/A'}`);
       console.log();
     });
+  } else {
+    console.log('⚠️  本次扫描未找到新的fills\n');
+  }
+  
+  // 显示所有缓存的fills
+  const cachedFills = persist.getFills(25);
+  
+  if (cachedFills.length > 0) {
+    console.log(`\n📦 缓存中的所有Fills（最近${cachedFills.length}条）:\n`);
+    
+    cachedFills.forEach((fill, i) => {
+      console.log(`${i + 1}. 区块 ${fill.height} - ${fill.ticker || 'N/A'} ${fill.side || ''}`);
+      if (fill.price) console.log(`   价格: ${fill.price}`);
+      if (fill.size) console.log(`   数量: ${fill.size}`);
+    });
     
     // 保存结果
     const fs = require('fs');
     const path = require('path');
     const outputFile = path.join(__dirname, 'data', 'onchain_fills_events.json');
     
-    fs.writeFileSync(outputFile, JSON.stringify(fills, null, 2));
+    fs.writeFileSync(outputFile, JSON.stringify(cachedFills, null, 2));
     console.log(`\n💾 已保存到: ${outputFile}\n`);
   } else {
-    console.log('⚠️  未找到该账户的fills\n');
+    console.log('\n⚠️  缓存中没有fills\n');
     console.log('可能原因:');
-    console.log('1. 扫描的区块范围内没有fills');
+    console.log('1. 扫描的区块范围内没有该账户的交易');
     console.log('2. 事件格式与预期不符');
-    console.log('3. 需要扫描更多区块\n');
+    console.log('3. 需要扫描更多历史区块\n');
   }
 }
 
