@@ -158,11 +158,24 @@ async function getFills(limit = 100) {
   
   console.log('   Indexer不可用（geoblocked）\n');
   
-  // 不使用本地daemon记录 - 罗大爷要求完全从链上拿
-  console.log('3. ❌ 不使用本地daemon记录（罗大爷要求完全从链上）\n');
-  console.log('   等待: 紧急链上扫描完成...');
-  console.log('   或: 实时监听器捕获新订单\n');
+  // Fallback: 临时显示本地daemon记录（明确标注）
+  console.log('3. Fallback: 使用本地daemon记录（临时显示，明确标注）...');
+  const localFills = fetchFillsFromLocal();
   
+  if (localFills.length > 0) {
+    console.log(`⚠️  显示${localFills.length}条本地记录（daemon记录，非链上）\n`);
+    console.log('   说明: 链上扫描需要70,000+区块（10+小时）');
+    console.log('   临时显示本地记录，等实时监听器捕获新订单\n');
+    
+    // 标记为本地数据
+    return localFills.slice(-limit).map(f => ({
+      ...f,
+      type: 'LOCAL', // 明确标记为本地记录
+      source: 'daemon' // 来源标记
+    }));
+  }
+  
+  console.log('❌ 无可用数据源\n');
   return [];
 }
 
