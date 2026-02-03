@@ -288,6 +288,7 @@ async function main() {
 module.exports = {
   scanBlocks,
   getLatestHeight,
+  getBlock,
   extractOrdersFromBlock
 };
 
