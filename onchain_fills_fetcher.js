@@ -158,18 +158,11 @@ async function getFills(limit = 100) {
   
   console.log('   Indexer不可用（geoblocked）\n');
   
-  // Fallback: 本地daemon记录（不是链上数据！）
-  console.log('3. Fallback到本地daemon记录（⚠️ 不是链上数据）...');
-  const localFills = fetchFillsFromLocal();
+  // 不使用本地daemon记录 - 罗大爷要求完全从链上拿
+  console.log('3. ❌ 不使用本地daemon记录（罗大爷要求完全从链上）\n');
+  console.log('   等待: 紧急链上扫描完成...');
+  console.log('   或: 实时监听器捕获新订单\n');
   
-  if (localFills.length > 0) {
-    console.log(`⚠️  从本地获取${localFills.length}条记录（daemon记录，非链上）\n`);
-    console.log('   说明: 这些是daemon记录的本地数据');
-    console.log('   等待: 实时监听器捕获新订单（真正的链上数据）\n');
-    return localFills.slice(-limit);
-  }
-  
-  console.log('❌ 无可用数据源\n');
   return [];
 }
 
