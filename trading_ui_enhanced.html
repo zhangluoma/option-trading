@@ -539,14 +539,17 @@
       const winRate = totalTrades > 0 ? (winningTrades / totalTrades * 100).toFixed(1) : 0;
       
       // ✅ 使用API返回的真实equity（链上数据）
-      // 不要重复计算已平仓盈亏，它已经反映在equity中了
       const currentEquity = window.realEquity || 161.13;
       const progressPercent = (currentEquity / 5000 * 100).toFixed(1);
       
+      // ✅ 真正的总盈亏 = 当前净值 - 起始资金
+      const initialEquity = 160.0; // 起始资金（实际值）
+      const trueTotalPnl = currentEquity - initialEquity;
+      
       // 更新显示
       document.getElementById('current-equity').textContent = `$${currentEquity.toFixed(2)}`;
-      // 显示已实现盈亏（仅已平仓）
-      document.getElementById('total-pnl').textContent = `${realizedPnl >= 0 ? '+' : ''}$${realizedPnl.toFixed(2)}`;
+      // 显示真实总盈亏（包含未实现）
+      document.getElementById('total-pnl').textContent = `${trueTotalPnl >= 0 ? '+' : ''}$${trueTotalPnl.toFixed(2)}`;
       document.getElementById('total-trades').textContent = totalTrades;
       document.getElementById('win-rate').textContent = `${winRate}%`;
       
@@ -567,7 +570,7 @@
       
       // 更新总盈亏颜色
       const pnlEl = document.getElementById('total-pnl');
-      pnlEl.className = `stat-value ${totalPnl >= 0 ? 'positive' : 'negative'}`;
+      pnlEl.className = `stat-value ${trueTotalPnl >= 0 ? 'positive' : 'negative'}`;
     }
 
     // Net Worth图表
