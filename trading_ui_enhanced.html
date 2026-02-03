@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🚀 $160→$5000 挑战</title>
-  <!-- Version: 2026-02-03-02:00 - 区块显示修复版 -->
+  <!-- Version: 2026-02-03-02:22 - 持仓显示最终修复版 -->
   <style>
     * {
       margin: 0;
@@ -468,6 +468,7 @@
     }
 
     function updatePositionsWithAvg(positions) {
+      console.log('🔍 updatePositionsWithAvg called with:', positions);
       const container = document.getElementById('positions-container');
       
       document.getElementById('active-positions').textContent = positions.length;
@@ -480,13 +481,19 @@
       let html = '';
       
       positions.forEach(pos => {
+        console.log('🔍 处理持仓:', pos.ticker, pos);
+        
         const sideBadge = pos.side === 'LONG' 
           ? '<span class="badge badge-long">做多</span>'
           : '<span class="badge badge-short">做空</span>';
         
-        const pnl = pos.pnl || 0;
-        const pnlPercent = pos.pnlPercent || 0;
-        const pnlColor = pnl >= 0 ? '#10b981' : '#ef4444';
+        // 计算P&L（基于value字段）
+        const pnl = pos.value || 0;
+        const entryValue = (pos.avgEntryPrice || pos.entryPrice) * pos.size;
+        const currentValue = pos.currentPrice * pos.size;
+        const calculatedPnl = pos.side === 'LONG' ? (currentValue - entryValue) : (entryValue - currentValue);
+        const pnlPercent = entryValue !== 0 ? (calculatedPnl / Math.abs(entryValue)) * 100 : 0;
+        const pnlColor = calculatedPnl >= 0 ? '#10b981' : '#ef4444';
         
         html += `
           <div class="position-card">
@@ -504,7 +511,7 @@
               </div>
               <div class="detail-item">
                 <div>开仓均价</div>
-                <div class="detail-value">$${pos.avgEntryPrice.toFixed(4)}</div>
+                <div class="detail-value">$${(pos.avgEntryPrice || pos.entryPrice || pos.currentPrice).toFixed(4)}</div>
               </div>
               <div class="detail-item">
                 <div>当前价格</div>
@@ -513,7 +520,7 @@
               <div class="detail-item">
                 <div>P&L</div>
                 <div class="detail-value" style="color: ${pnlColor};">
-                  ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)
+                  ${calculatedPnl >= 0 ? '+' : ''}$${calculatedPnl.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)
                 </div>
               </div>
               ${pos.fillCount > 0 ? `<div class="detail-item" style="grid-column: span 2; font-size: 11px; color: #9ca3af;">
