@@ -407,17 +407,32 @@
           console.error('Failed to get scanner status:', error);
         }
         
-        // 获取持仓（包含均价）
-        const positionsRes = await fetch('/api/positions-with-avg');
-        const positionsData = await positionsRes.json();
+        // 获取持仓（包含均价） - 独立错误处理
+        let positionsData = { success: false, positions: [] };
+        try {
+          const positionsRes = await fetch('/api/positions-with-avg');
+          positionsData = await positionsRes.json();
+        } catch (error) {
+          console.error('Failed to get positions:', error);
+        }
         
-        // 获取交易历史和统计
-        const historyRes = await fetch('/api/trade-history');
-        const historyData = await historyRes.json();
+        // 获取交易历史和统计 - 独立错误处理
+        let historyData = { success: false, trades: [] };
+        try {
+          const historyRes = await fetch('/api/trades');
+          historyData = await historyRes.json();
+        } catch (error) {
+          console.error('Failed to get trades:', error);
+        }
         
-        // 获取fills历史
-        const fillsRes = await fetch('/api/fills?limit=25');
-        const fillsData = await fillsRes.json();
+        // 获取fills历史 - 独立错误处理
+        let fillsData = { success: false, fills: [] };
+        try {
+          const fillsRes = await fetch('/api/fills?limit=25');
+          fillsData = await fillsRes.json();
+        } catch (error) {
+          console.error('Failed to get fills:', error);
+        }
         
         if (historyData.success) {
           // ✅ 保存API返回的真实equity（链上数据）
