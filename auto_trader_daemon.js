@@ -38,6 +38,9 @@ const dydxData = require('./dydx_data');
 // 持仓追踪器（记录开仓信息）
 const positionTracker = require('./position_tracker');
 
+// Net Worth追踪器
+const networthTracker = require('./networth_tracker');
+
 // ==================== 配置 ====================
 
 const CONFIG = {
@@ -876,10 +879,33 @@ async function mainLoop() {
   // 加载历史持仓
   loadPositions();
   
+  // 初始化Net Worth记录时间
+  global.lastNetWorthRecord = 0;
+  
   while (isRunning) {
     try {
       log('='.repeat(60));
       log('💓 Heartbeat');
+      
+      // 0. 每小时记录Net Worth
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+      if (now - global.lastNetWorthRecord >= oneHour) {
+        try {
+          const status = await dydxData.getFullAccountStatus();
+          const record = networthTracker.record(
+            status.equity,
+            status.usedMargin,
+            status.availableMargin,
+            status.usdcBalance,
+            status.positions.length
+          );
+          log(`📊 Net Worth recorded: $${record.netWorth} (${record.positionCount} positions)`);
+          global.lastNetWorthRecord = now;
+        } catch (error) {
+          log(`Failed to record net worth: ${error.message}`, 'WARN');
+        }
+      }
       
       // 1. 检查需要平仓的持仓
       await checkAndClosePositions();

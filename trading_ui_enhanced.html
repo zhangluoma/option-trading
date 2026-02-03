@@ -275,6 +275,7 @@
       }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -321,6 +322,43 @@
       <div class="stat-card">
         <div class="stat-label">活跃持仓</div>
         <div class="stat-value neutral" id="active-positions">0</div>
+      </div>
+    </div>
+
+    <!-- Net Worth图表 -->
+    <div class="panel" style="margin-bottom: 20px;">
+      <h2>📈 Net Worth 趋势</h2>
+      <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <button class="btn" onclick="loadNetworthChart(24)" style="padding: 8px 16px; font-size: 13px;">24小时</button>
+        <button class="btn" onclick="loadNetworthChart(72)" style="padding: 8px 16px; font-size: 13px;">3天</button>
+        <button class="btn" onclick="loadNetworthChart(168)" style="padding: 8px 16px; font-size: 13px;">7天</button>
+      </div>
+      <div style="height: 300px; position: relative;">
+        <canvas id="networthChart"></canvas>
+      </div>
+      <div id="chart-stats" style="margin-top: 15px; padding: 15px; background: #1f2937; border-radius: 8px; display: none;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+          <div>
+            <div style="color: #9ca3af; font-size: 12px; margin-bottom: 4px;">起始</div>
+            <div style="color: #fff; font-size: 16px; font-weight: 600;" id="chart-first">-</div>
+          </div>
+          <div>
+            <div style="color: #9ca3af; font-size: 12px; margin-bottom: 4px;">当前</div>
+            <div style="color: #fff; font-size: 16px; font-weight: 600;" id="chart-latest">-</div>
+          </div>
+          <div>
+            <div style="color: #9ca3af; font-size: 12px; margin-bottom: 4px;">最高</div>
+            <div style="color: #10b981; font-size: 16px; font-weight: 600;" id="chart-max">-</div>
+          </div>
+          <div>
+            <div style="color: #9ca3af; font-size: 12px; margin-bottom: 4px;">最低</div>
+            <div style="color: #ef4444; font-size: 16px; font-weight: 600;" id="chart-min">-</div>
+          </div>
+          <div>
+            <div style="color: #9ca3af; font-size: 12px; margin-bottom: 4px;">变化</div>
+            <div style="font-size: 16px; font-weight: 600;" id="chart-change">-</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -532,12 +570,150 @@
       pnlEl.className = `stat-value ${totalPnl >= 0 ? 'positive' : 'negative'}`;
     }
 
+    // Net Worth图表
+    let networthChart = null;
+    
+    async function loadNetworthChart(hours = 24) {
+      try {
+        const res = await fetch(`/api/networth-history?hours=${hours}`);
+        const data = await res.json();
+        
+        if (!data.success || data.history.length === 0) {
+          console.log('No networth history data');
+          return;
+        }
+        
+        // 准备数据
+        const labels = data.history.map(r => {
+          const date = new Date(r.timestamp);
+          return date.toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        });
+        
+        const values = data.history.map(r => r.netWorth);
+        
+        // 销毁旧图表
+        if (networthChart) {
+          networthChart.destroy();
+        }
+        
+        // 创建新图表
+        const ctx = document.getElementById('networthChart').getContext('2d');
+        networthChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Net Worth ($)',
+              data: values,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#10b981',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true,
+                labels: {
+                  color: '#9ca3af',
+                  font: { size: 12 }
+                }
+              },
+              tooltip: {
+                backgroundColor: '#1f2937',
+                titleColor: '#fff',
+                bodyColor: '#9ca3af',
+                borderColor: '#374151',
+                borderWidth: 1,
+                padding: 12,
+                displayColors: false,
+                callbacks: {
+                  label: function(context) {
+                    return 'Net Worth: $' + context.parsed.y.toFixed(2);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: {
+                  color: '#374151',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#9ca3af',
+                  font: { size: 11 },
+                  maxRotation: 45,
+                  minRotation: 45
+                }
+              },
+              y: {
+                grid: {
+                  color: '#374151',
+                  drawBorder: false
+                },
+                ticks: {
+                  color: '#9ca3af',
+                  font: { size: 11 },
+                  callback: function(value) {
+                    return '$' + value.toFixed(0);
+                  }
+                }
+              }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index'
+            }
+          }
+        });
+        
+        // 显示统计信息
+        if (data.stats) {
+          const statsEl = document.getElementById('chart-stats');
+          statsEl.style.display = 'block';
+          
+          document.getElementById('chart-first').textContent = '$' + data.stats.first.toFixed(2);
+          document.getElementById('chart-latest').textContent = '$' + data.stats.latest.toFixed(2);
+          document.getElementById('chart-max').textContent = '$' + data.stats.max.toFixed(2);
+          document.getElementById('chart-min').textContent = '$' + data.stats.min.toFixed(2);
+          
+          const changeColor = data.stats.change >= 0 ? '#10b981' : '#ef4444';
+          const changeText = (data.stats.change >= 0 ? '+' : '') + '$' + data.stats.change.toFixed(2) + 
+                            ' (' + (data.stats.changePercent >= 0 ? '+' : '') + data.stats.changePercent.toFixed(2) + '%)';
+          const changeEl = document.getElementById('chart-change');
+          changeEl.textContent = changeText;
+          changeEl.style.color = changeColor;
+        }
+        
+      } catch (error) {
+        console.error('Failed to load networth chart:', error);
+      }
+    }
+
     // 页面加载时刷新
     window.addEventListener('load', () => {
       refreshAll();
+      loadNetworthChart(24); // 默认显示24小时
       
       // 每30秒自动刷新
       setInterval(refreshAll, 30000);
+      // 每5分钟刷新图表
+      setInterval(() => loadNetworthChart(24), 5 * 60 * 1000);
     });
   </script>
 </body>

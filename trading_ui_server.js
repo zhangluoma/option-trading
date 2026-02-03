@@ -165,6 +165,26 @@ app.get('/api/trade-history', async (req, res) => {
   }
 });
 
+// Net Worth历史数据API
+app.get('/api/networth-history', (req, res) => {
+  try {
+    const networthTracker = require('./networth_tracker');
+    const hours = parseInt(req.query.hours) || 24;
+    const history = networthTracker.getRecentHours(hours);
+    const stats = networthTracker.getStats();
+    
+    res.json({
+      success: true,
+      history,
+      stats,
+      count: history.length
+    });
+  } catch (error) {
+    console.error('Failed to get networth history:', error);
+    res.json({ success: false, error: error.message, history: [] });
+  }
+});
+
 // 健康检查
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
