@@ -165,6 +165,43 @@ app.get('/api/trade-history', async (req, res) => {
   }
 });
 
+// Fills历史API
+app.get('/api/fills', async (req, res) => {
+  try {
+    const { getFills } = require('./onchain_fills_fetcher');
+    const limit = parseInt(req.query.limit) || 25;
+    
+    const fills = await getFills(limit);
+    
+    res.json({
+      success: true,
+      fills,
+      count: fills.length
+    });
+  } catch (error) {
+    console.error('Failed to get fills:', error);
+    res.json({ success: false, error: error.message, fills: [] });
+  }
+});
+
+// 持仓（包含均价）API
+app.get('/api/positions-with-avg', async (req, res) => {
+  try {
+    const { getPositionsWithAvgPrice } = require('./position_with_avg_price');
+    
+    const positions = await getPositionsWithAvgPrice();
+    
+    res.json({
+      success: true,
+      positions,
+      count: positions.length
+    });
+  } catch (error) {
+    console.error('Failed to get positions with avg price:', error);
+    res.json({ success: false, error: error.message, positions: [] });
+  }
+});
+
 // Net Worth历史数据API
 app.get('/api/networth-history', (req, res) => {
   try {
